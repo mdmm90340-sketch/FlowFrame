@@ -1,0 +1,13 @@
+{
+  "kernelVersion": "2026.08.19-flowframe.douyin.73d89b8.3",
+  "ytDlpVersion": "2026.08.19",
+  "ytDlpCommit": "3a08beaf031ab68f966401ead017ac81fe8486cf",
+  "douyinPatchRepository": "https://github.com/IvanaGyro/yt-dlp",
+  "douyinPatchCommit": "73d89b829ed21493e832561ffbee20d08c6e662e",
+  "flowFramePatch": "yt-dlp-flowframe-douyin-uploader.patch",
+  "flowFramePatchSha256": "B311CF8BCC3B3CA756CC305CB8853BB1EF0F4541EBD63085E50EAA616DAE2B07",
+  "flowFrameGalleryPatch": "yt-dlp-flowframe-douyin-gallery.patch",
+  "flowFrameGalleryPatchSha256": "1CCEE6377AF996D3928724C6F6B0BE00B1EAF937E9FFDCEC19BB74DA9AEB79D9",
+  "flowFrameGallerySchemaVersion": 1,
+  "buildFormat": "deterministic-python-zipapp-v1"
+}

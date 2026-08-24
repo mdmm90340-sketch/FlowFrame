@@ -1,0 +1,31 @@
+FlowFrame / 流影 1.1.2
+
+Copyright (C) 2026 FlowFrame contributors
+
+This program is free software licensed under the GNU General Public License,
+version 3. A complete copy is included beside this notice as LICENSE-GPL-3.0.txt.
+
+Core third-party components:
+- youtubedl-android 0.18.1 (GPL-3.0)
+- yt-dlp 2026.08.19, commit 3a08beaf031ab68f966401ead017ac81fe8486cf (Unlicense)
+- FFmpeg (LGPL/GPL depending on build configuration)
+- AndroidX / Jetpack Compose / Kotlin (Apache-2.0)
+
+Pinned Douyin compatibility kernel:
+- Source patch: IvanaGyro/yt-dlp commit 73d89b829ed21493e832561ffbee20d08c6e662e
+  https://github.com/IvanaGyro/yt-dlp/commit/73d89b829ed21493e832561ffbee20d08c6e662e
+- SM3-derived portion: py-gmssl (MIT), copyright (c) 2022 Nemo
+- ABogus-derived portion: f2 by JohnserfSeed (Apache License 2.0)
+- FlowFrame local changes: prefer the Douyin nickname in uploader, propagate the
+  signed User-Agent/Referer, and expose `/note/` image/audio metadata to the app.
+- Kernel version: 2026.08.19-flowframe.douyin.73d89b8.3
+- Kernel SHA-256: E88DBA1F25813F43E9292B676F8D03186757CA0D2011DF4CE54ECD60810019E8
+
+License copies:
+- LICENSE-GPL-3.0.txt
+- LICENSE-UNLICENSE-YT-DLP.txt
+- LICENSE-MIT-PY-GMSSL.txt
+- LICENSE-APACHE-2.0-F2.txt
+
+Source and exact build versions are distributed with the APK delivery package.
+Platform names and trademarks belong to their respective owners.

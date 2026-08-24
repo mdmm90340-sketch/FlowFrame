@@ -1,0 +1,51 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify pinned yt-dlp kernel
+        shell: pwsh
+        run: |
+          $expected = "E88DBA1F25813F43E9292B676F8D03186757CA0D2011DF4CE54ECD60810019E8"
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath "app/src/main/res/raw/ytdlp").Hash
+          if ($actual -ne $expected) {
+            throw "Bundled yt-dlp hash mismatch: $actual"
+          }
+
+      - name: Test, lint, and build Debug APK
+        run: ./gradlew testDebugUnitTest lintRelease assembleDebug --stacktrace
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowFrame-debug-arm64
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

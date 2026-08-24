@@ -1,0 +1,17 @@
+diff --git a/yt_dlp/extractor/tiktok.py b/yt_dlp/extractor/tiktok.py
+--- a/yt_dlp/extractor/tiktok.py
++++ b/yt_dlp/extractor/tiktok.py
+@@ -1732,7 +1732,12 @@ class DouyinIE(TikTokBaseIE):
+         if not detail:
+             raise ExtractorError('Unable to download video details. The video may be private or deleted.', expected=True)
+ 
+-        return self._parse_aweme_video_app(detail)
++        info = self._parse_aweme_video_app(detail)
++        nickname = traverse_obj(detail, ('author', 'nickname', {str}))
++        if nickname:
++            info['uploader'] = nickname
++        info['http_headers'] = {'User-Agent': user_agent, 'Referer': self._WEBPAGE_HOST}
++        return info
+ 
+ 
+ class TikTokVMIE(InfoExtractor):
