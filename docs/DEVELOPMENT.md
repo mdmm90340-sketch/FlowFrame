@@ -103,3 +103,15 @@ adb shell am instrument -w com.flowframe.app.test/com.flowframe.app.ReleaseNativ
 新模型的图片选择、目标目录和传输指标都有兼容默认值。任务完成/失败/取消为终态，重试创建新尝试；删除历史不移除媒体。修改这些行为必须同时运行 JVM 和对应设备测试。
 
 WebP 原生库来源、普通构建时的校验与重打包、NDK 重编步骤见 [WEBP-16K.md](WEBP-16K.md)。常规构建无需 NDK；不要将重建脚本的中间文件或私密签名加入 Git。
+
+## 1.2.1 效率回归
+
+并发、恢复快照和任务投影的 JVM 测试可单独运行：
+
+```powershell
+.\gradlew.bat testDebugUnitTest --tests '*DownloadConcurrencyGateTest' --tests '*TaskUiProjectorTest' --tests '*EditorRecoverySnapshotTest'
+```
+
+`MainViewModelProjectionTest` 使用真实 ViewModel、SavedStateHandle 和本次创建的临时任务，记录 5 次进度更新产生的额外草稿写入与未变化行重建，预期均为 0。`TaskStorePersistenceTest` 使用隔离目录验证无效写入、延迟合并、终态立即保存以及真实写入失败后的恢复。这些测试和现有 Compose/生命周期/图集测试一起在同签名 Debug 测试环境运行。
+
+性能数字应记录条件和全部样本，不以更改虚拟机配置、清空历史或移除失败样本制造改善；本轮方法与边界见 [优化验收报告](OPTIMIZATION-1.2.1.md)。

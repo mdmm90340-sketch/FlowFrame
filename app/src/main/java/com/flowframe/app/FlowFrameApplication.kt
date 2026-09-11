@@ -31,9 +31,7 @@ class AppContainer(application: Application) {
     val settingsStore = AppSettingsStore(application)
     val networkMonitor = NetworkMonitor(application, appScope)
     val engine = DownloadEngine(application)
-    val downloadGate = DownloadConcurrencyGate {
-        settingsStore.state.value.maxConcurrentDownloads
-    }
+    val downloadGate = DownloadConcurrencyGate(settingsStore.state) { it.maxConcurrentDownloads }
     private val engineReady: Deferred<Unit> = appScope.async(Dispatchers.IO) {
         engine.initialize()
     }

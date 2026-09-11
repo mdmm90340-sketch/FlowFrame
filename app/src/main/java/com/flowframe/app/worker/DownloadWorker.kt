@@ -192,12 +192,12 @@ class DownloadWorker(
                 withContext(Dispatchers.IO) {
                     engine.execute(request, processId) { percent, eta, line ->
                         val now = SystemClock.elapsedRealtime()
-                        val transfer = TransferProgress.parse(line)
                         val merging = line.contains("[Merger]") ||
                             line.contains("[ExtractAudio]") ||
                             line.contains("[VideoRemuxer]")
                         if (merging || now - lastUpdate.get() >= PROGRESS_THROTTLE_MS) {
                             lastUpdate.set(now)
+                            val transfer = TransferProgress.parse(line)
                             events.trySend(
                                 ProgressEvent(
                                     stage = if (merging) TaskStage.MERGING else TaskStage.DOWNLOADING,
@@ -342,7 +342,7 @@ class DownloadWorker(
     }
 
     private suspend fun updateProgress(taskId: String, event: ProgressEvent) {
-        store.update(taskId, persistImmediately = false) { current ->
+        val updated = store.update(taskId, persistImmediately = false) { current ->
             current.copy(
                 stage = event.stage,
                 progress = maxOf(current.progress, event.progress.coerceIn(0f, 0.99f)),
@@ -352,7 +352,7 @@ class DownloadWorker(
                 bytesPerSecond = event.transfer?.bytesPerSecond,
             )
         }
-        store.find(taskId)?.let { DownloadNotifications.update(applicationContext, it) }
+        updated?.let { DownloadNotifications.update(applicationContext, it) }
     }
 
     private suspend fun handleFailure(taskId: String, error: Throwable): Result {

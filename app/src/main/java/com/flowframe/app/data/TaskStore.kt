@@ -5,9 +5,12 @@ import android.os.SystemClock
 import android.util.AtomicFile
 import com.flowframe.app.core.model.DownloadTask
 import com.flowframe.app.core.model.TaskTransitions
+import com.flowframe.app.core.model.TaskStage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,16 +24,23 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
 
-class TaskStore(context: Context) {
+class TaskStore internal constructor(
+    context: Context,
+    private val scope: CoroutineScope,
+    private val elapsedRealtime: () -> Long,
+) {
+    constructor(context: Context) : this(
+        context, CoroutineScope(SupervisorJob() + Dispatchers.IO), SystemClock::elapsedRealtime,
+    )
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val serializer = ListSerializer(DownloadTask.serializer())
     private val atomicFile = AtomicFile(File(context.filesDir, "download_tasks.json"))
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val ready = CompletableDeferred<Unit>()
     private val mutex = Mutex()
     private val _tasks = MutableStateFlow<List<DownloadTask>>(emptyList())
     private var lastPersistAt = 0L
     private var dirty = false
+    private var pendingFlush: Job? = null
     val tasks: StateFlow<List<DownloadTask>> = _tasks.asStateFlow()
     var loadWarning: String? = null
         private set
@@ -55,12 +65,6 @@ class TaskStore(context: Context) {
                 ready.completeExceptionally(error)
             }
         }
-        scope.launch {
-            while (true) {
-                delay(PERSIST_INTERVAL_MS)
-                mutex.withLock { if (dirty) runCatching { persist(_tasks.value) } }
-            }
-        }
     }
 
     suspend fun awaitLoaded() = ready.await()
@@ -69,7 +73,7 @@ class TaskStore(context: Context) {
     suspend fun add(task: DownloadTask) = withContext(Dispatchers.IO) {
         ready.await()
         mutex.withLock {
-            if (_tasks.value.none { it.id == task.id }) persist(listOf(task) + _tasks.value)
+            if (_tasks.value.none { it.id == task.id }) persist(listOf(task.withoutEphemeralUrls()) + _tasks.value)
         }
     }
 
@@ -81,15 +85,20 @@ class TaskStore(context: Context) {
         ready.await()
         mutex.withLock {
             val current = find(id) ?: return@withLock null
-            val proposed = transform(current).copy(updatedAtEpochMillis = System.currentTimeMillis())
-            val changed = TaskTransitions.apply(current, proposed).withoutEphemeralUrls()
-            if (changed == current) return@withLock current
+            val proposed = TaskTransitions.apply(current, transform(current)).withoutEphemeralUrls()
+            if (proposed == current) return@withLock current
+            val changed = proposed.copy(updatedAtEpochMillis = System.currentTimeMillis())
             val updated = _tasks.value.map { if (it.id == id) changed else it }
-            if (persistImmediately || SystemClock.elapsedRealtime() - lastPersistAt >= PERSIST_INTERVAL_MS) {
+            val terminal = when (changed.stage) {
+                TaskStage.COMPLETED, TaskStage.CANCELED, TaskStage.FAILED -> true
+                else -> false
+            }
+            if (persistImmediately || terminal || elapsedRealtime() - lastPersistAt >= PERSIST_INTERVAL_MS) {
                 persist(updated)
             } else {
                 _tasks.value = updated
                 dirty = true
+                scheduleFlush()
             }
             changed
         }
@@ -97,24 +106,51 @@ class TaskStore(context: Context) {
 
     suspend fun remove(id: String) = withContext(Dispatchers.IO) {
         ready.await()
-        mutex.withLock { persist(_tasks.value.filterNot { it.id == id }) }
+        mutex.withLock {
+            if (_tasks.value.any { it.id == id }) persist(_tasks.value.filterNot { it.id == id })
+        }
+    }
+
+    /** Called with mutex held; at most one delayed write exists while the snapshot is dirty. */
+    private fun scheduleFlush(afterFailure: Boolean = false) {
+        if (!dirty || pendingFlush != null) return
+        val waitMillis = if (afterFailure) PERSIST_INTERVAL_MS else
+            (PERSIST_INTERVAL_MS - (elapsedRealtime() - lastPersistAt)).coerceAtLeast(1L)
+        pendingFlush = scope.launch {
+            delay(waitMillis)
+            mutex.withLock {
+                pendingFlush = null
+                if (dirty) {
+                    try {
+                        persist(_tasks.value)
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
+                        // Retain the latest snapshot and wait a full window before another attempt.
+                        scheduleFlush(afterFailure = true)
+                    }
+                }
+            }
+        }
     }
 
     private fun persist(tasks: List<DownloadTask>) {
-        val sanitized = tasks.map { it.withoutEphemeralUrls() }
+        // Loading, adding and transforming records sanitize once at their entry points.
         val output = atomicFile.startWrite()
         try {
-            output.write(json.encodeToString(serializer, sanitized).toByteArray(Charsets.UTF_8))
+            output.write(json.encodeToString(serializer, tasks).toByteArray(Charsets.UTF_8))
             output.flush()
             atomicFile.finishWrite(output)
-            _tasks.value = sanitized
+            _tasks.value = tasks
             dirty = false
-            lastPersistAt = SystemClock.elapsedRealtime()
+            lastPersistAt = elapsedRealtime()
+            pendingFlush?.cancel()
+            pendingFlush = null
         } catch (error: Throwable) {
             atomicFile.failWrite(output)
             throw error
         }
     }
-    private fun DownloadTask.withoutEphemeralUrls(): DownloadTask = copy(thumbnailUrl = null)
+    private fun DownloadTask.withoutEphemeralUrls(): DownloadTask =
+        if (thumbnailUrl == null) this else copy(thumbnailUrl = null)
     private companion object { const val PERSIST_INTERVAL_MS = 1_500L }
 }

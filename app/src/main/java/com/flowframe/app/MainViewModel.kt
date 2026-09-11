@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.flowframe.app.core.engine.BundledYtDlpInstaller
 import com.flowframe.app.core.error.FailureClassifier
 import com.flowframe.app.core.error.FailureOperation
-import com.flowframe.app.core.model.DownloadTask
 import com.flowframe.app.core.model.GalleryOutputMode
 import com.flowframe.app.core.model.MediaKind
 import com.flowframe.app.core.model.MediaPreview
@@ -20,14 +19,11 @@ import com.flowframe.app.core.url.SupportedUrlParser
 import com.flowframe.app.core.url.InputNormalizationResult
 import com.flowframe.app.data.ThemePreference
 import com.flowframe.app.ui.FlowFrameCallbacks
-import com.flowframe.app.ui.model.DownloadTaskStage
-import com.flowframe.app.ui.model.DownloadTaskUi
 import com.flowframe.app.ui.model.FlowFrameDestination
 import com.flowframe.app.ui.model.FlowFrameUiState
 import com.flowframe.app.ui.model.FormatPresetUi
 import com.flowframe.app.ui.model.GalleryOutputModeUi
 import com.flowframe.app.ui.model.MediaKindUi
-import com.flowframe.app.ui.model.MediaPlatform
 import com.flowframe.app.ui.model.MediaPreviewUi
 import com.flowframe.app.ui.model.ParseStage
 import com.flowframe.app.ui.model.ParseUiState
@@ -38,6 +34,10 @@ import com.flowframe.app.ui.model.TaskFilter
 import com.flowframe.app.ui.model.TaskOutputAction
 import com.flowframe.app.ui.model.ThemeMode
 import com.flowframe.app.ui.model.FlowFrameOverlay
+import com.flowframe.app.ui.model.TaskNetworkConstraints
+import com.flowframe.app.ui.model.TaskUiProjector
+import com.flowframe.app.ui.model.editorRecoverySnapshot
+import com.flowframe.app.ui.model.toUi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -46,6 +46,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -57,6 +60,7 @@ class MainViewModel(application: Application, private val savedState: SavedState
     private val repository = container.repository
     private val settingsStore = container.settingsStore
     private val previews = LinkedHashMap<String, MediaPreview>()
+    private val previewThumbnails = MutableStateFlow<Map<String, String>>(emptyMap())
     private var activePreview: MediaPreview? = null
     private var parseJob: Job? = null
     private var parseGeneration = 0L
@@ -91,30 +95,33 @@ class MainViewModel(application: Application, private val savedState: SavedState
             }
         }
         viewModelScope.launch {
-            _uiState.collect { state ->
-                savedState["input"] = state.home.linkText
-                savedState["destination"] = state.selectedDestination.name
-                if (!restoringPreview) {
-                    savedState["preview_url"] = activePreview?.sourceUrl
-                    savedState["selected_images"] = state.activePreview?.selectedImageIndices?.let { ArrayList(it) }
-                    savedState["preset"] = state.activePreview?.selectedPresetId
-                    savedState["audio_only"] = state.activePreview?.audioOnly
-                    savedState["gallery_mode"] = state.activePreview?.selectedGalleryOutputMode?.name
+            _uiState.map { state ->
+                state.editorRecoverySnapshot(activePreview?.sourceUrl, restoringPreview)
+            }.distinctUntilChanged().collect { snapshot ->
+                savedState["input"] = snapshot.input
+                savedState["destination"] = snapshot.destination
+                snapshot.preview?.let { preview ->
+                    savedState["preview_url"] = preview.url
+                    savedState["selected_images"] = preview.selectedImages?.let { ArrayList(it) }
+                    savedState["preset"] = preview.preset
+                    savedState["audio_only"] = preview.audioOnly
+                    savedState["gallery_mode"] = preview.galleryMode
                 }
             }
         }
         viewModelScope.launch {
-            container.networkMonitor.state.collect { network ->
-                _uiState.update { it.copy(tasks = it.tasks.copy(
-                    isOffline = !network.connected,
-                    items = repository.tasks.value.map { task -> task.toUi() },
-                )) }
-            }
-        }
-        viewModelScope.launch {
-            repository.tasks.collect { tasks ->
+            val projector = TaskUiProjector()
+            val networkConstraints = combine(
+                container.networkMonitor.state,
+                settingsStore.state.map { it.wifiOnly }.distinctUntilChanged(),
+            ) { network, wifiOnly ->
+                TaskNetworkConstraints(network.connected, network.wifi, wifiOnly)
+            }.distinctUntilChanged()
+            combine(repository.tasks, networkConstraints, previewThumbnails) { tasks, network, thumbnails ->
+                network to projector.project(tasks, network, thumbnails)
+            }.collect { (network, rows) ->
                 _uiState.update { state ->
-                    state.copy(tasks = state.tasks.copy(items = tasks.map { it.toUi() }))
+                    state.copy(tasks = state.tasks.copy(items = rows, isOffline = !network.connected))
                 }
             }
         }
@@ -135,7 +142,6 @@ class MainViewModel(application: Application, private val savedState: SavedState
                         activePreview = state.activePreview?.copy(
                             destinationLabel = settings.outputDirectoryName ?: defaultDirectoryLabel(),
                         ),
-                        tasks = state.tasks.copy(items = repository.tasks.value.map { it.toUi() }),
                     )
                 }
             }
@@ -226,6 +232,9 @@ class MainViewModel(application: Application, private val savedState: SavedState
                 previews.remove(preview.stableKey)
                 previews[preview.stableKey] = preview
                 while (previews.size > 8) previews.remove(previews.keys.first())
+                previewThumbnails.value = previews.mapNotNull { (key, value) ->
+                    value.thumbnailUrl?.let { key to it }
+                }.toMap()
                 activePreview = preview
                 _uiState.update { state ->
                     val recent = previews.values.toList().asReversed().take(3).map { it.toRecentUi() }
@@ -647,67 +656,12 @@ class MainViewModel(application: Application, private val savedState: SavedState
         },
     )
 
-    private fun DownloadTask.toUi() = DownloadTaskUi(
-        id = id,
-        title = title,
-        platform = platform.toUi(),
-        stage = when (stage) {
-            TaskStage.QUEUED -> DownloadTaskStage.Queued
-            TaskStage.RESOLVING -> DownloadTaskStage.Resolving
-            TaskStage.DOWNLOADING -> DownloadTaskStage.Downloading
-            TaskStage.MERGING -> DownloadTaskStage.Merging
-            TaskStage.COMPLETED -> DownloadTaskStage.Completed
-            TaskStage.FAILED -> DownloadTaskStage.Failed
-            TaskStage.CANCELED -> DownloadTaskStage.Canceled
-        },
-        formatLabel = when (preset) {
-            QualityPreset.RECOMMENDED -> "推荐"
-            QualityPreset.BEST -> "最高画质"
-            QualityPreset.DATA_SAVER -> "节省空间"
-            QualityPreset.AUDIO_ONLY -> "仅音频"
-        },
-        mediaKind = mediaKind.toUi(),
-        galleryOutputMode = galleryOutputMode?.toUi(),
-        outputLocations = resolvedOutputLocations,
-        progress = if (stage == TaskStage.QUEUED || stage == TaskStage.RESOLVING) null else progress,
-        downloadedBytes = if (stage == TaskStage.COMPLETED) outputSizeBytes else downloadedBytes,
-        totalBytes = if (stage == TaskStage.COMPLETED) outputSizeBytes.takeIf { it > 0 } else totalBytes,
-        bytesPerSecond = bytesPerSecond,
-        thumbnailUrl = previews["${platform.name}:$mediaId"]?.thumbnailUrl,
-        etaSeconds = etaSeconds,
-        errorMessage = when {
-            stage == TaskStage.CANCELED -> "任务已取消"
-            stage == TaskStage.QUEUED && !container.networkMonitor.state.value.connected -> "等待网络恢复"
-            stage == TaskStage.QUEUED && settingsStore.state.value.wifiOnly && !container.networkMonitor.state.value.wifi -> "等待 Wi-Fi 网络"
-            else -> errorMessage
-        },
-    )
-
-    private fun Platform.toUi() = when (this) {
-        Platform.DOUYIN -> MediaPlatform.Douyin
-        Platform.BILIBILI -> MediaPlatform.Bilibili
-        Platform.XIAOHONGSHU -> MediaPlatform.Xiaohongshu
-        Platform.WEIBO -> MediaPlatform.Weibo
-        Platform.KUAISHOU -> MediaPlatform.Kuaishou
-    }
-
     private fun Platform.inputLabel() = when (this) {
         Platform.DOUYIN -> "抖音"
         Platform.BILIBILI -> "B站"
         Platform.XIAOHONGSHU -> "小红书"
         Platform.WEIBO -> "微博"
         Platform.KUAISHOU -> "快手"
-    }
-
-    private fun MediaKind.toUi() = when (this) {
-        MediaKind.VIDEO -> MediaKindUi.Video
-        MediaKind.GALLERY -> MediaKindUi.Gallery
-    }
-
-    private fun GalleryOutputMode.toUi() = when (this) {
-        GalleryOutputMode.IMAGES -> GalleryOutputModeUi.Images
-        GalleryOutputMode.AUDIO -> GalleryOutputModeUi.Audio
-        GalleryOutputMode.MP4 -> GalleryOutputModeUi.Mp4
     }
 
     private fun GalleryOutputModeUi.toData() = when (this) {
