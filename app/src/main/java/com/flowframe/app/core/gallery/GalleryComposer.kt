@@ -16,6 +16,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.max
 import kotlin.math.min
@@ -67,10 +68,16 @@ class GalleryComposer(private val context: Context) {
                 }
                 .start()
             process = startedProcess
+            val encodedMicros = AtomicLong(0L)
             logPump = Thread({
                 runCatching {
-                    startedProcess.inputStream.use { input ->
-                        FileOutputStream(logFile).use { output -> input.copyTo(output) }
+                    startedProcess.inputStream.bufferedReader(Charsets.UTF_8).use { input ->
+                        logFile.bufferedWriter(Charsets.UTF_8).use { log ->
+                            input.forEachLine { line ->
+                                GalleryEncodingProgress.timeMicros(line)?.let { encodedMicros.set(max(encodedMicros.get(), it)) }
+                                log.appendLine(line)
+                            }
+                        }
                     }
                 }
             }, "FlowFrame-ffmpeg-log").apply {
@@ -80,10 +87,8 @@ class GalleryComposer(private val context: Context) {
 
             while (!process.hasExitedCompat()) {
                 currentCoroutineContext().ensureActive()
-                val elapsed = runCatching {
-                    output.length().toFloat() / max(1L, estimateFinalBytes(durationMillis)).toFloat()
-                }.getOrDefault(0f)
-                onProgress(0.2f + elapsed.coerceIn(0f, 1f) * 0.75f)
+                val fraction = GalleryEncodingProgress.fraction(encodedMicros.get(), durationMillis)
+                onProgress(0.2f + fraction * 0.75f)
                 delay(PROCESS_POLL_MILLIS)
             }
             if (process.exitValue() != 0) {
@@ -110,7 +115,12 @@ class GalleryComposer(private val context: Context) {
     }
 
     private fun renderFrame(source: File, destination: File) {
-        val original = BitmapFactory.decodeFile(source.absolutePath)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(source.absolutePath, bounds)
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "图片尺寸无效" }
+        var sample = 1
+        while ((bounds.outWidth / sample).toLong() * (bounds.outHeight / sample) > 4_000_000L) sample *= 2
+        val original = BitmapFactory.decodeFile(source.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
             ?: throw IllegalStateException("图片无法解码，不能合成视频")
         require(original.width > 0 && original.height > 0) { "图片尺寸无效" }
         val output = Bitmap.createBitmap(OUTPUT_WIDTH, OUTPUT_HEIGHT, Bitmap.Config.ARGB_8888)
@@ -163,6 +173,9 @@ class GalleryComposer(private val context: Context) {
         add("-hide_banner")
         add("-loglevel")
         add("warning")
+        add("-progress")
+        add("pipe:1")
+        add("-nostats")
         add("-y")
         frames.forEach { frame ->
             add("-loop")
@@ -270,9 +283,6 @@ class GalleryComposer(private val context: Context) {
         }
     }
 
-    private fun estimateFinalBytes(durationMillis: Long): Long =
-        max(MIN_VIDEO_BYTES, durationMillis * ESTIMATED_BYTES_PER_SECOND / 1_000L)
-
     private fun Process.terminateNow() {
         if (hasExitedCompat()) return
         destroy()
@@ -305,7 +315,6 @@ class GalleryComposer(private val context: Context) {
         private const val TERMINATION_POLL_COUNT = 10
         private const val TERMINATION_POLL_MILLIS = 50L
         private const val MIN_VIDEO_BYTES = 16_384L
-        private const val ESTIMATED_BYTES_PER_SECOND = 400_000L
         private const val DURATION_TOLERANCE_MILLIS = 1_500L
     }
 }

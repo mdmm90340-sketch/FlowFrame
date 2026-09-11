@@ -5,8 +5,10 @@
 - [youtubedl-android 0.18.1](https://github.com/yausername/youtubedl-android)，GPL-3.0；Android 端 yt-dlp 封装、Python/QuickJS 运行环境与 FFmpeg 集成。
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp)，Unlicense；站点解析与媒体格式选择。APK 固定内置官方 `2026.08.19` 提交 [`3a08beaf031ab68f966401ead017ac81fe8486cf`](https://github.com/yt-dlp/yt-dlp/commit/3a08beaf031ab68f966401ead017ac81fe8486cf)。
 - [FFmpeg](https://ffmpeg.org/)，按其构建配置适用 LGPL/GPL；用于合并媒体流和音频提取。随 `youtubedl-android:ffmpeg` 预编译组件分发。
+- [libwebp 1.6.0](https://github.com/webmproject/libwebp/tree/v1.6.0)，BSD 风格许可与专利授权。为解决原依赖内部 5 个库仅 4 KiB 对齐的问题，使用固定官方源码与 NDK r28c 重新编译这 5 个库的 arm64/x86_64 版本；来源、哈希、许可和重建入口见 [`native/webp-1.6.0`](native/webp-1.6.0/)。FFmpeg 本体、其余原生依赖和 yt-dlp 内核版本保持不变。
 - AndroidX、Jetpack Compose、Material Components，Apache-2.0。
 - Kotlin 与 kotlinx.coroutines / kotlinx.serialization，Apache-2.0。
+- [Coil 2.7.0](https://github.com/coil-kt/coil/tree/2.7.0) 与其 OkHttp 依赖，Apache-2.0；用于媒体封面、图片预览和有界图片缓存。
 
 `youtubedl-android 0.18.1` 的原生运行包还包含 CPython 3.12、QuickJS、Mutagen、PyCryptodome 及其 Termux 运行依赖；其 JVM 传递依赖包含 Jackson、Apache Commons IO 与 Apache Commons Compress。固定 yt-dlp 内核生成的 JavaScript 解析组件还引用 Meriyah（ISC）与 Astring（MIT）。这些组件保留各自许可证，详细清单应以固定的上游源码、AAR/POM 元数据及 Gradle 依赖树为准。
 
@@ -46,7 +48,7 @@
 
 ## 对应源码与构建来源
 
-- FlowFrame 自身源码、固定补丁和构建脚本：与 APK 同一 GitHub Release 的 `v1.1.2` 源码归档。
+- FlowFrame 自身源码、固定补丁和构建脚本：与本地 `1.2.0` APK 一并交付的源码归档；该测试版本暂未发布到 GitHub Release。
 - youtubedl-android 0.18.1：[固定标签源码](https://github.com/yausername/youtubedl-android/tree/0.18.1) 与 [FFmpeg 构建说明](https://github.com/yausername/youtubedl-android/blob/0.18.1/BUILD_FFMPEG.md)。
 - yt-dlp：官方提交 [`3a08beaf`](https://github.com/yt-dlp/yt-dlp/commit/3a08beaf031ab68f966401ead017ac81fe8486cf) 加仓库中的三个补丁；`tools/build-patched-ytdlp.ps1` 可重新生成内核。
 - FFmpeg 7.1.1：[官方源码与许可证](https://ffmpeg.org/releases/)；本 APK 使用 youtubedl-android 0.18.1 提供的 GPLv3 原生构建。

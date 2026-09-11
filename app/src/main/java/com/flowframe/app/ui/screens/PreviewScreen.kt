@@ -1,37 +1,35 @@
 package com.flowframe.app.ui.screens
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.HighQuality
-import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.MovieCreation
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,24 +39,25 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flowframe.app.ui.components.MediaArtwork
 import com.flowframe.app.ui.components.PlatformBadge
-import com.flowframe.app.ui.components.SectionHeading
-import com.flowframe.app.ui.model.FormatPresetUi
 import com.flowframe.app.ui.model.GalleryOutputModeUi
-import com.flowframe.app.ui.model.GalleryOutputOptionUi
 import com.flowframe.app.ui.model.MediaKindUi
 import com.flowframe.app.ui.model.MediaPreviewUi
 
@@ -77,608 +76,294 @@ fun PreviewScreen(
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("解析预览", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "确认内容与保存格式",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
+                title = { Text("下载预览", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回首页")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
             )
         },
-        bottomBar = {
-            PreviewActionBar(
-                destinationLabel = state.destinationLabel,
-                estimatedSizeLabel = state.estimatedSizeLabel,
-                actionLabel = state.downloadActionLabel,
-                canDownload = state.canDownload && state.selectedOutputAvailable,
-                onDownloadRequested = onDownloadRequested,
-            )
-        },
+        bottomBar = { PreviewActionBar(state, onDownloadRequested) },
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            item {
-                Box {
-                    MediaArtwork(
-                        platform = state.platform,
-                        title = state.title,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(216.dp),
-                    )
-                    PlatformBadge(
-                        platform = state.platform,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp),
-                    )
-                    if (state.previewBadgeLabel.isNotBlank()) {
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(12.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.68f),
-                        ) {
-                            Text(
-                                text = state.previewBadgeLabel,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.inverseOnSurface,
-                            )
-                        }
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
+            BoxWithConstraints(Modifier.widthIn(max = 1120.dp).fillMaxSize()) {
+                val wide = maxWidth >= 760.dp
+                if (wide) Row(
+                    Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                ) {
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) { PreviewHeader(state) }
+                    Column(
+                        Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        PreviewOptions(
+                            state, onPresetSelected, onGalleryOutputModeSelected,
+                            onAudioOnlyChanged, onContentSelectionRequested, onFormatDetailsRequested,
+                        )
+                        Spacer(Modifier.height(12.dp))
                     }
+                } else Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(22.dp),
+                ) {
+                    PreviewHeader(state)
+                    PreviewOptions(
+                        state, onPresetSelected, onGalleryOutputModeSelected,
+                        onAudioOnlyChanged, onContentSelectionRequested, onFormatDetailsRequested,
+                    )
                 }
             }
+        }
+    }
+}
 
-            item {
-                Column {
+@Composable
+private fun PreviewHeader(state: MediaPreviewUi) {
+    Box {
+        MediaArtwork(
+            platform = state.platform,
+            title = state.title,
+            thumbnailUrl = state.thumbnailUrl ?: state.imageUrls.firstOrNull(),
+            showTitle = false,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxWidth().aspectRatio(1.6f),
+        )
+        PlatformBadge(state.platform, Modifier.align(Alignment.TopStart).padding(12.dp))
+        if (state.previewBadgeLabel.isNotBlank()) Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.inverseSurface,
+            contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        ) {
+            Text(
+                state.previewBadgeLabel,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            state.title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            state.author,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (state.displayMetadataLabel.isNotBlank()) Text(
+            state.displayMetadataLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (state.description.isNotBlank()) Text(
+            state.description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PreviewOptions(
+    state: MediaPreviewUi,
+    onPresetSelected: (String) -> Unit,
+    onGalleryOutputModeSelected: (GalleryOutputModeUi) -> Unit,
+    onAudioOnlyChanged: (Boolean) -> Unit,
+    onContentSelectionRequested: () -> Unit,
+    onFormatDetailsRequested: () -> Unit,
+) {
+    if (state.mediaKind == MediaKindUi.Gallery) {
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("preview_gallery").clickable(
+                role = Role.Button,
+                onClickLabel = "浏览并选择要保存的图片",
+                onClick = onContentSelectionRequested,
+            ),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Icons.Rounded.Collections, contentDescription = null)
+                Column(Modifier.weight(1f)) {
+                    Text("浏览与选择图片", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        text = state.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(7.dp))
-                    Text(
-                        text = buildString {
-                            append(state.author)
-                            if (state.displayMetadataLabel.isNotBlank()) {
-                                append(" · ${state.displayMetadataLabel}")
-                            }
-                        },
+                        "已选 " + state.selectedImageCount + " / " + state.resolvedImageCount + " 张",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (state.description.isNotBlank()) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = state.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-
-            val selectableContentCount = when (state.mediaKind) {
-                MediaKindUi.Video -> state.contentCount
-                MediaKindUi.Gallery -> state.resolvedImageCount
-            }
-            if (selectableContentCount > 1) {
-                item {
-                    ContentSelectionCard(
-                        contentCount = selectableContentCount,
-                        selectedCount = state.selectedContentCount,
-                        mediaKind = state.mediaKind,
-                        onClick = onContentSelectionRequested,
                     )
                 }
-            }
-
-            if (state.mediaKind == MediaKindUi.Gallery) {
-                item {
-                    SectionHeading(
-                        eyebrow = "图文作品",
-                        title = "选择保存方式",
-                    )
-                }
-                item {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 1.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(state.galleryOutputOptions, key = { it.mode.name }) { option ->
-                            GalleryOutputModeCard(
-                                option = option,
-                                selected = option.mode == state.selectedGalleryOutputMode,
-                                onClick = { onGalleryOutputModeSelected(option.mode) },
-                            )
-                        }
-                    }
-                }
-            } else {
-                item {
-                    SectionHeading(
-                        eyebrow = "智能匹配",
-                        title = "选择保存质量",
-                    )
-                }
-
-                if (state.presets.isEmpty()) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                            ),
-                        ) {
-                            Text(
-                                text = "没有找到可下载的格式，请重新解析链接。",
-                                modifier = Modifier.padding(18.dp),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                        }
-                    }
-                } else {
-                    item {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 1.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(state.presets, key = { it.id }) { preset ->
-                                FormatPresetCard(
-                                    preset = preset,
-                                    selected = preset.id == state.selectedPresetId,
-                                    onClick = { onPresetSelected(preset.id) },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        FilterChip(
-                            selected = state.audioOnly,
-                            onClick = { onAudioOnlyChanged(!state.audioOnly) },
-                            label = { Text("仅音频") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Rounded.MusicNote,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                        )
-                        OutlinedButton(
-                            onClick = onFormatDetailsRequested,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Tune,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Text("格式说明", modifier = Modifier.padding(start = 7.dp))
-                        }
-                    }
-                }
-            }
-
-            item {
-                OutputSummaryCard(state)
+                Icon(Icons.Rounded.ChevronRight, contentDescription = null)
             }
         }
     }
-}
-
-@Composable
-private fun ContentSelectionCard(
-    contentCount: Int,
-    selectedCount: Int,
-    mediaKind: MediaKindUi,
-    onClick: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-        ),
-        shape = MaterialTheme.shapes.large,
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(17.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
-        ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Icon(
-                    imageVector = if (mediaKind == MediaKindUi.Gallery) {
-                        Icons.Rounded.Collections
-                    } else {
-                        Icons.AutoMirrored.Rounded.PlaylistPlay
-                    },
-                    contentDescription = null,
-                    modifier = Modifier.padding(10.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (mediaKind == MediaKindUi.Gallery) "查看图片" else "选择内容",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = if (mediaKind == MediaKindUi.Gallery) {
-                        "共 $contentCount 张 · 将全部保存"
-                    } else {
-                        "共 $contentCount 项 · 已选 $selectedCount 项"
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                Icons.Rounded.ChevronRight,
-                contentDescription = if (mediaKind == MediaKindUi.Gallery) "查看图片" else "选择分集",
-            )
+        Text(
+            if (state.mediaKind == MediaKindUi.Gallery) "保存方式" else "保存质量",
+            modifier = Modifier.weight(1f).semantics { heading() },
+            style = MaterialTheme.typography.titleLarge,
+        )
+        TextButton(onClick = onFormatDetailsRequested) {
+            Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(17.dp))
+            Text("格式详情", Modifier.padding(start = 6.dp))
         }
     }
-}
-
-@Composable
-private fun FormatPresetCard(
-    preset: FormatPresetUi,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val border = when {
-        selected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    }
-    Card(
-        modifier = Modifier
-            .width(178.dp)
-            .animateContentSize()
-            .clickable(enabled = preset.available, onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            },
-            contentColor = if (preset.available) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
-            },
-        ),
-        border = border,
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = preset.title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+    Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (state.mediaKind == MediaKindUi.Gallery) {
+            state.galleryOutputOptions.forEach { option ->
+                OutputChoice(
+                    title = option.title,
+                    subtitle = option.subtitle,
+                    detail = if (option.available) option.detail else option.unavailableReason.orEmpty(),
+                    selected = state.selectedGalleryOutputMode == option.mode,
+                    available = option.available,
+                    onClick = { onGalleryOutputModeSelected(option.mode) },
                 )
-                if (!preset.available) {
-                    Icon(
-                        imageVector = Icons.Rounded.Lock,
-                        contentDescription = "当前不可用",
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
             }
-            preset.badge?.let { badge ->
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = badge,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            Text(
-                text = preset.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = preset.unavailableReason ?: preset.detail,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun GalleryOutputModeCard(
-    option: GalleryOutputOptionUi,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val icon = when (option.mode) {
-        GalleryOutputModeUi.Images -> Icons.Rounded.PhotoLibrary
-        GalleryOutputModeUi.Audio -> Icons.Rounded.AudioFile
-        GalleryOutputModeUi.Mp4 -> Icons.Rounded.MovieCreation
-    }
-    Card(
-        modifier = Modifier
-            .width(190.dp)
-            .animateContentSize()
-            .clickable(enabled = option.available, onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.52f)
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            },
-            contentColor = if (option.available) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f)
-            },
-        ),
-        border = if (selected) {
-            BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        },
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.padding(8.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Spacer(Modifier.width(9.dp))
-                Text(
-                    text = option.title,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+            state.presets.forEach { preset ->
+                OutputChoice(
+                    title = preset.title,
+                    subtitle = preset.subtitle,
+                    detail = if (preset.available) preset.detail else preset.unavailableReason.orEmpty(),
+                    selected = !state.audioOnly && state.selectedPresetId == preset.id,
+                    available = preset.available,
+                    onClick = { onPresetSelected(preset.id) },
                 )
-                if (!option.available) {
-                    Icon(
-                        imageVector = Icons.Rounded.Lock,
-                        contentDescription = "当前不可用",
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
             }
-            option.badge?.let { badge ->
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = badge,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            Text(
-                text = option.subtitle,
+            if (state.presets.isEmpty()) Text(
+                "没有找到可下载的格式，请返回重新解析。",
+                color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = if (option.available) option.detail else option.unavailableReason.orEmpty(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            FilterChip(
+                selected = state.audioOnly,
+                onClick = { onAudioOnlyChanged(!state.audioOnly) },
+                enabled = state.hasAudio,
+                label = { Text(if (state.hasAudio) "仅保存音频" else "没有可用音轨") },
+                leadingIcon = { Icon(Icons.Rounded.MusicNote, null, Modifier.size(18.dp)) },
             )
         }
     }
-}
-
-@Composable
-private fun OutputSummaryCard(state: MediaPreviewUi) {
-    val summary = when (state.mediaKind) {
-        MediaKindUi.Video -> if (state.audioOnly) {
-            Triple(
-                Icons.Rounded.AudioFile,
-                "将只保存音频轨道",
-                "适合离线聆听；最终格式取决于平台提供的音频流。",
-            )
-        } else {
-            Triple(
-                Icons.Rounded.HighQuality,
-                "将优先使用兼容格式",
-                "必要时会在下载后合并音视频，完成前不会提前显示 100%。",
-            )
-        }
-
-        MediaKindUi.Gallery -> when (state.selectedGalleryOutputMode) {
-            GalleryOutputModeUi.Images -> Triple(
-                Icons.Rounded.PhotoLibrary,
-                "将逐张保存 ${state.resolvedImageCount} 张图片",
-                "每张图片都会独立进入系统相册，任务完成后可打开首张或一次分享全部。",
-            )
-
-            GalleryOutputModeUi.Audio -> Triple(
-                Icons.Rounded.AudioFile,
-                if (state.hasAudio) "将只保存图集配乐" else "当前作品没有可用配乐",
-                if (state.hasAudio) {
-                    "保留作品原声，图片不会写入相册。"
-                } else {
-                    "请选择保存图片或合成 MP4。"
-                },
-            )
-
-            GalleryOutputModeUi.Mp4 -> Triple(
-                Icons.Rounded.MovieCreation,
-                "将自动合成为 MP4",
-                if (state.hasAudio) {
-                    "按作品顺序与节奏生成视频，并保留原配乐。"
-                } else {
-                    "按作品顺序生成静音视频，便于播放和分享。"
-                },
-            )
-        }
-    }
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
-        ),
-        shape = MaterialTheme.shapes.large,
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Row(
-            modifier = Modifier.padding(17.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
-        ) {
-            Icon(
-                imageVector = summary.first,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.secondary,
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
+            Text(
+                when {
+                    state.mediaKind == MediaKindUi.Video && state.audioOnly -> "保存音频轨道，完成后可打开或分享。"
+                    state.mediaKind == MediaKindUi.Video -> "必要时自动合并音视频，文件处理完成后即可打开。"
+                    state.selectedGalleryOutputMode == GalleryOutputModeUi.Audio -> "仅保存作品配乐，图片不会写入保存目录。"
+                    state.selectedImageCount == 0 -> "还没有选择图片。请先选择至少一张图片。"
+                    state.selectedGalleryOutputMode == GalleryOutputModeUi.Images -> "按原顺序保存已选的 " + state.selectedImageCount + " 张图片。"
+                    else -> "将选中的 " + state.selectedImageCount + " 张图片合成 MP4" +
+                        if (state.hasAudio) "，并保留配乐。" else "，不添加音轨。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = summary.second,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = summary.third,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
     }
 }
 
-private val MediaPreviewUi.downloadActionLabel: String
-    get() = when (mediaKind) {
-        MediaKindUi.Video -> "下载"
-        MediaKindUi.Gallery -> when (selectedGalleryOutputMode) {
-            GalleryOutputModeUi.Images -> "保存图片"
-            GalleryOutputModeUi.Audio -> "保存音频"
-            GalleryOutputModeUi.Mp4 -> "生成 MP4"
-        }
-    }
-
 @Composable
-private fun PreviewActionBar(
-    destinationLabel: String,
-    estimatedSizeLabel: String?,
-    actionLabel: String,
-    canDownload: Boolean,
-    onDownloadRequested: () -> Unit,
+private fun OutputChoice(
+    title: String,
+    subtitle: String,
+    detail: String,
+    selected: Boolean,
+    available: Boolean,
+    onClick: () -> Unit,
 ) {
     Surface(
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().selectable(
+            selected = selected,
+            enabled = available,
+            role = Role.RadioButton,
+            onClick = onClick,
+        ),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = if (available) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(
+            if (selected) 1.5.dp else 1.dp,
+            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Rounded.FolderOpen,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = destinationLabel,
-                        modifier = Modifier.padding(start = 5.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (estimatedSizeLabel != null) {
-                    Text(
-                        text = "预计 $estimatedSizeLabel",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
-            Button(
-                onClick = onDownloadRequested,
-                enabled = canDownload,
-                contentPadding = PaddingValues(horizontal = 19.dp, vertical = 13.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
+            RadioButton(selected = selected, onClick = null, enabled = available)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium)
+                if (detail.isNotBlank()) Text(
+                    detail,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(actionLabel, modifier = Modifier.padding(start = 7.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewActionBar(state: MediaPreviewUi, onDownloadRequested: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shadowElevation = 8.dp) {
+        Box(Modifier.fillMaxWidth().navigationBarsPadding(), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.widthIn(max = 800.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Rounded.FolderOpen, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        state.destinationLabel,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.estimatedSizeLabel?.let { Text("约 " + it, style = MaterialTheme.typography.labelMedium) }
+                }
+                Button(
+                    onClick = onDownloadRequested,
+                    enabled = state.canDownload && state.selectedOutputAvailable,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).testTag("preview_download"),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+                ) {
+                    Icon(Icons.Rounded.Download, null, Modifier.size(20.dp))
+                    Text(
+                        when {
+                            state.mediaKind == MediaKindUi.Video && state.audioOnly -> "下载音频"
+                            state.mediaKind == MediaKindUi.Video -> "开始下载"
+                            state.selectedGalleryOutputMode == GalleryOutputModeUi.Images -> "保存图片"
+                            state.selectedGalleryOutputMode == GalleryOutputModeUi.Audio -> "保存配乐"
+                            else -> "生成 MP4"
+                        },
+                        Modifier.padding(start = 8.dp),
+                    )
+                }
             }
         }
     }

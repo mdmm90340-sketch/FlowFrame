@@ -41,6 +41,12 @@ interface FlowFrameCallbacks {
     fun onDynamicColorChanged(enabled: Boolean) = Unit
     fun onDiagnosticsRequested() = Unit
     fun onAboutRequested() = Unit
+    fun onImageSelectionChanged(index: Int, selected: Boolean) = Unit
+    fun onSelectAllImages(selected: Boolean) = Unit
+    fun onOverlayDismissed() = Unit
+    fun onCopyDiagnosticsRequested() = Unit
+    fun onOpenRepositoryRequested() = Unit
+    fun onResetOutputDirectoryRequested() = Unit
 }
 
 object NoOpFlowFrameCallbacks : FlowFrameCallbacks

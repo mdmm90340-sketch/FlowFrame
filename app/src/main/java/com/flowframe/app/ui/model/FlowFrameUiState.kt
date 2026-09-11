@@ -9,7 +9,11 @@ data class FlowFrameUiState(
     val activePreview: MediaPreviewUi? = null,
     val tasks: TasksUiState = TasksUiState(),
     val settings: SettingsUiState = SettingsUiState(),
+    val overlay: FlowFrameOverlay? = null,
+    val diagnosticsText: String = "",
 )
+
+enum class FlowFrameOverlay { Gallery, FormatDetails, Diagnostics, About }
 
 enum class FlowFrameDestination {
     Home,
@@ -20,6 +24,9 @@ enum class FlowFrameDestination {
 enum class MediaPlatform {
     Douyin,
     Bilibili,
+    Xiaohongshu,
+    Weibo,
+    Kuaishou,
     Unknown,
 }
 
@@ -75,6 +82,7 @@ data class RecentMediaUi(
     val author: String,
     val platform: MediaPlatform,
     val metadata: String,
+    val thumbnailUrl: String? = null,
 )
 
 @Immutable
@@ -100,9 +108,16 @@ data class MediaPreviewUi(
     val estimatedSizeLabel: String? = null,
     val destinationLabel: String = "默认目录",
     val canDownload: Boolean = false,
+    val thumbnailUrl: String? = null,
+    val imageUrls: List<String> = emptyList(),
+    val selectedImageIndices: Set<Int> = (0 until imageCount).toSet(),
+    val formatDetails: String = "",
 ) {
     val resolvedImageCount: Int
         get() = imageCount.coerceAtLeast(0)
+
+    val selectedImageCount: Int
+        get() = selectedImageIndices.count { it in 0 until resolvedImageCount }
 
     val resolutionLabel: String
         get() {
@@ -139,7 +154,7 @@ data class MediaPreviewUi(
                 mode = GalleryOutputModeUi.Images,
                 title = "保存图片",
                 subtitle = "逐张保存原图",
-                detail = resolvedImageCount.takeIf { it > 0 }?.let { "共 $it 张，可在相册中单独查看" }
+                detail = resolvedImageCount.takeIf { it > 0 }?.let { "已选 $selectedImageCount / $it 张，保留原始顺序" }
                     ?: "保留作品中的全部图片",
                 available = resolvedImageCount > 0,
                 unavailableReason = "没有找到可保存的图片",
@@ -165,13 +180,13 @@ data class MediaPreviewUi(
 
     val selectedOutputAvailable: Boolean
         get() = when (mediaKind) {
-            MediaKindUi.Video -> audioOnly || presets.any {
+            MediaKindUi.Video -> (audioOnly && hasAudio) || (!audioOnly && presets.any {
                 it.id == selectedPresetId && it.available
-            }
+            })
 
             MediaKindUi.Gallery -> galleryOutputOptions.any {
                 it.mode == selectedGalleryOutputMode && it.available
-            }
+            } && (selectedGalleryOutputMode == GalleryOutputModeUi.Audio || selectedImageCount > 0)
         }
 }
 
@@ -212,6 +227,7 @@ enum class TaskFilter {
     Active,
     Completed,
     Failed,
+    Canceled,
 }
 
 enum class DownloadTaskStage {
@@ -221,7 +237,8 @@ enum class DownloadTaskStage {
     Merging,
     Paused,
     Completed,
-    Failed;
+    Failed,
+    Canceled;
 
     val isActive: Boolean
         get() = this == Queued || this == Resolving || this == Downloading || this == Merging
@@ -229,7 +246,8 @@ enum class DownloadTaskStage {
     val overflowAction: TaskOverflowAction
         get() = when (this) {
             Completed,
-            Failed -> TaskOverflowAction.DeleteRecord
+            Failed,
+            Canceled -> TaskOverflowAction.DeleteRecord
             else -> TaskOverflowAction.CancelTask
         }
 }
@@ -278,6 +296,7 @@ data class DownloadTaskUi(
     val bytesPerSecond: Long? = null,
     val etaSeconds: Long? = null,
     val errorMessage: String? = null,
+    val thumbnailUrl: String? = null,
 ) {
     val isImageGalleryOutput: Boolean
         get() = mediaKind == MediaKindUi.Gallery && galleryOutputMode == GalleryOutputModeUi.Images
@@ -303,6 +322,8 @@ data class SettingsUiState(
     val themeMode: ThemeMode = ThemeMode.System,
     val dynamicColor: Boolean = false,
     val versionLabel: String = "0.1.0",
+    val dynamicColorAvailable: Boolean = true,
+    val customOutputDirectory: Boolean = false,
 )
 
 enum class ThemeMode {

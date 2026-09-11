@@ -9,6 +9,9 @@ enum class FailureOperation {
 
 enum class FailureKind {
     LOGIN_REQUIRED,
+    CHALLENGE_REQUIRED,
+    CONTENT_UNAVAILABLE,
+    MIXED_CONTENT_UNSUPPORTED,
     PRIVATE_OR_REMOVED,
     DNS,
     TLS,
@@ -51,11 +54,13 @@ object FailureClassifier {
         val kind = when {
             normalized.hasAny(STORAGE_FULL_MARKERS) -> FailureKind.STORAGE_FULL
             normalized.hasAny(STORAGE_PERMISSION_MARKERS) -> FailureKind.STORAGE_PERMISSION
+            normalized.contains("视频与正文图片混合或多视频") -> FailureKind.MIXED_CONTENT_UNSUPPORTED
+            normalized.hasAny(CHALLENGE_MARKERS) || CHALLENGE_STATUS.containsMatchIn(source) -> FailureKind.CHALLENGE_REQUIRED
             RATE_LIMITED_STATUS.containsMatchIn(source) ||
                 normalized.hasAny(RATE_LIMIT_MARKERS) -> FailureKind.RATE_LIMITED
             FORBIDDEN_STATUS.containsMatchIn(source) -> FailureKind.HTTP_FORBIDDEN
             normalized.hasAny(PRIVATE_MARKERS) -> FailureKind.PRIVATE_OR_REMOVED
-            normalized.hasAny(EXTRACTOR_OUTDATED_MARKERS) -> FailureKind.EXTRACTOR_OUTDATED
+            normalized.contains("fresh cookies (not necessarily logged in)") -> FailureKind.EXTRACTOR_OUTDATED
             normalized.hasAny(LOGIN_MARKERS) -> FailureKind.LOGIN_REQUIRED
             normalized.hasAny(DNS_MARKERS) -> FailureKind.DNS
             normalized.hasAny(TLS_MARKERS) -> FailureKind.TLS
@@ -64,6 +69,8 @@ object FailureClassifier {
             normalized.hasAny(FORMAT_MARKERS) -> FailureKind.FORMAT_UNAVAILABLE
             normalized.hasAny(FFMPEG_MARKERS) -> FailureKind.FFMPEG
             normalized.hasAny(UNSUPPORTED_MARKERS) -> FailureKind.UNSUPPORTED_LINK
+            normalized.contains("公开页面未提供可下载媒体") -> FailureKind.CONTENT_UNAVAILABLE
+            normalized.hasAny(EXTRACTOR_OUTDATED_MARKERS) -> FailureKind.EXTRACTOR_OUTDATED
             else -> FailureKind.UNKNOWN
         }
         return FailureClassification(
@@ -98,6 +105,9 @@ object FailureClassifier {
 
     private fun userMessage(kind: FailureKind, operation: FailureOperation): String = when (kind) {
         FailureKind.LOGIN_REQUIRED -> "该内容需要登录，当前仅支持公开内容"
+        FailureKind.CHALLENGE_REQUIRED -> "平台要求安全验证，请在原平台确认后重新分享链接"
+        FailureKind.CONTENT_UNAVAILABLE -> "公开页面暂未提供媒体，请重新复制作品分享链接"
+        FailureKind.MIXED_CONTENT_UNSUPPORTED -> "暂不支持视频与正文图片混合或多视频作品，请使用单视频或纯图文链接"
         FailureKind.PRIVATE_OR_REMOVED -> "内容为私密、已删除或不可用"
         FailureKind.DNS -> "域名解析失败，请检查网络"
         FailureKind.TLS -> "安全连接失败，请检查系统时间或网络"
@@ -112,7 +122,7 @@ object FailureClassifier {
         FailureKind.FORMAT_UNAVAILABLE -> "没有找到可用的下载格式"
         FailureKind.FFMPEG -> "音视频处理失败，请重试"
         FailureKind.STORAGE_FULL -> "存储空间不足，请清理后重试"
-        FailureKind.STORAGE_PERMISSION -> "无法写入存储，请检查权限"
+        FailureKind.STORAGE_PERMISSION -> "无法写入保存位置，请在保存设置中重新选择目录或恢复默认目录"
         FailureKind.UNSUPPORTED_LINK -> "暂时无法识别这个链接"
         FailureKind.UNKNOWN -> when (operation) {
             FailureOperation.PARSE -> "解析失败，请稍后重试"
@@ -168,6 +178,8 @@ object FailureClassifier {
     private val FORBIDDEN_STATUS = Regex(
         """(?i)\b(?:http(?:\s+error)?|status(?:\s+code)?|response(?:\s+code)?|server\s+returned|error)[^\r\n]{0,24}\b403\b|\b403\s+forbidden\b""",
     )
+    private val CHALLENGE_STATUS = Regex("""(?i)\b(?:http(?:\s+error)?|status(?:\s+code)?)[^\r\n]{0,24}\b(?:461|471)\b""")
+    private val CHALLENGE_MARKERS = arrayOf("captcha required", "captcha challenge", "verify you are human", "平台要求安全验证", "需要验证码", "安全验证失败")
     private val RATE_LIMITED_STATUS = Regex(
         """(?i)\b(?:http(?:\s+error)?|status(?:\s+code)?|response(?:\s+code)?|server\s+returned|error)[^\r\n]{0,24}\b(?:412|429)\b|\b429\s+too\s+many\s+requests\b|\b412\s+precondition\s+failed\b""",
     )
@@ -178,7 +190,7 @@ object FailureClassifier {
     )
     private val BEARER_PATTERN = Regex("""(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}""")
     private val SECRET_ASSIGNMENT_PATTERN = Regex(
-        """(?i)[\"']?\b(cookie|authorization|token|access[_-]?token|refresh[_-]?token|ms[_-]?token|session(?:id)?|sid|ttwid|signature|sig|a_bogus|x-bogus|csrf(?:token)?|api[_-]?key)\b[\"']?\s*[:=]\s*(?!<redacted>)(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;]+)""",
+        """(?i)[\"']?\b(cookie|authorization|token|xsec[_-]?token|share[_-]?token|share[_-]?id|access[_-]?token|refresh[_-]?token|ms[_-]?token|session(?:id)?|sid|ttwid|signature|sig|a_bogus|x-bogus|csrf(?:token)?|api[_-]?key)\b[\"']?\s*[:=]\s*(?!<redacted>)(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s,;]+)""",
     )
     private val WINDOWS_PATH_PATTERN = Regex(
         """(?i)(?<![a-z0-9])(?:[a-z]:[\\/]|\\\\)[^\r\n<>|?*\":]+""",
@@ -205,6 +217,10 @@ object FailureClassifier {
         "read-only file system",
         "readonlyfilesystemexception",
         "securityexception",
+        "保存目录授权已失效",
+        "保存目录无法写入",
+        "无法在所选目录中创建媒体文件",
+        "无法写入所选保存目录",
     )
     private val RATE_LIMIT_MARKERS = arrayOf(
         "too many requests",
@@ -231,7 +247,6 @@ object FailureClassifier {
     private val EXTRACTOR_OUTDATED_MARKERS = arrayOf(
         "failed to parse json",
         "unable to extract",
-        "extractorerror",
         "report this issue",
         "confirm you are on the latest version",
         "platform page may have changed",

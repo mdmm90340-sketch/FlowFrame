@@ -66,6 +66,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import coil.compose.AsyncImage
 import com.flowframe.app.ui.components.FlowFrameBrandHeader
 import com.flowframe.app.ui.components.StatePanel
 import com.flowframe.app.ui.components.label
@@ -85,8 +89,8 @@ fun TasksScreen(
     state: TasksUiState,
     onFilterSelected: (TaskFilter) -> Unit,
     onTaskAction: (String, TaskAction) -> Unit,
-    onTaskOutputAction: (String, TaskOutputAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
+    onTaskOutputAction: (String, TaskOutputAction) -> Unit = { _, _ -> },
 ) {
     val visibleTasks = state.items.filter { task ->
         when (state.selectedFilter) {
@@ -94,6 +98,7 @@ fun TasksScreen(
             TaskFilter.Active -> task.stage.isActive || task.stage == DownloadTaskStage.Paused
             TaskFilter.Completed -> task.stage == DownloadTaskStage.Completed
             TaskFilter.Failed -> task.stage == DownloadTaskStage.Failed
+            TaskFilter.Canceled -> task.stage == DownloadTaskStage.Canceled
         }
     }
 
@@ -105,7 +110,6 @@ fun TasksScreen(
         item {
             FlowFrameBrandHeader(
                 title = "${state.activeTaskCount} 个进行中",
-                subtitle = "任务会在后台继续",
             )
         }
 
@@ -117,7 +121,7 @@ fun TasksScreen(
 
         item {
             Column {
-                Text("下载任务", style = MaterialTheme.typography.headlineSmall)
+                Text("下载任务", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(5.dp))
                 Text(
                     text = "查看进度、取消任务，或在失败后快速重试。",
@@ -188,7 +192,7 @@ private fun OfflineBanner() {
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Text(
-                    text = "已完成的内容仍可打开，其他任务将在联网后继续。",
+                    text = "已完成的内容仍可打开。等待中的任务将在联网后开始，失败任务可手动重试。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
@@ -220,7 +224,7 @@ private fun DownloadTaskCard(
             .fillMaxWidth()
             .animateContentSize(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         shape = MaterialTheme.shapes.large,
@@ -244,7 +248,7 @@ private fun DownloadTaskCard(
                         Box {
                             IconButton(
                                 onClick = { menuExpanded = true },
-                                modifier = Modifier.size(38.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(Icons.Rounded.MoreVert, contentDescription = "更多任务操作")
                             }
@@ -299,7 +303,9 @@ private fun DownloadTaskCard(
             }
 
             Spacer(Modifier.height(14.dp))
-            if (task.stage.isActive && task.progress == null) {
+            if (task.stage == DownloadTaskStage.Queued || task.stage == DownloadTaskStage.Resolving ||
+                (task.stage.isActive && task.progress == null)
+            ) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             } else {
                 LinearProgressIndicator(
@@ -316,7 +322,7 @@ private fun DownloadTaskCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            AnimatedVisibility(visible = task.errorMessage != null) {
+            AnimatedVisibility(visible = task.errorMessage != null && task.stage == DownloadTaskStage.Failed) {
                 task.errorMessage?.let { message ->
                     Surface(
                         modifier = Modifier
@@ -337,7 +343,9 @@ private fun DownloadTaskCard(
 
             TaskActions(
                 task = task,
-                onAction = onAction,
+                onAction = { action ->
+                    if (action == TaskAction.Delete) deleteConfirmationVisible = true else onAction(action)
+                },
                 onOutputAction = onOutputAction,
                 modifier = Modifier.padding(top = 10.dp),
             )
@@ -350,7 +358,7 @@ private fun DownloadTaskCard(
             icon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null) },
             title = { Text("删除任务记录？") },
             text = {
-                Text("只会从 FlowFrame 的任务列表移除此记录，不会删除已经保存到相册或媒体库的文件。")
+                Text("只会从任务列表移除此记录，不会删除已经保存的文件。")
             },
             confirmButton = {
                 TextButton(
@@ -400,6 +408,14 @@ private fun TaskArtwork(task: DownloadTaskUi) {
             modifier = Modifier.size(35.dp),
             tint = Color.White.copy(alpha = 0.9f),
         )
+        if (!task.thumbnailUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = task.thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -439,13 +455,10 @@ private fun TaskActions(
 
             DownloadTaskStage.Paused -> {
                 TextButton(onClick = { onAction(TaskAction.Cancel) }) { Text("取消") }
-                Button(onClick = { onAction(TaskAction.Resume) }) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("继续", modifier = Modifier.padding(start = 5.dp))
-                }
             }
 
-            DownloadTaskStage.Failed -> {
+            DownloadTaskStage.Failed,
+            DownloadTaskStage.Canceled -> {
                 TextButton(onClick = { onAction(TaskAction.Delete) }) { Text("删除") }
                 Button(onClick = { onAction(TaskAction.Retry) }) {
                     Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -506,6 +519,7 @@ private val TaskFilter.label: String
         TaskFilter.Active -> "进行中"
         TaskFilter.Completed -> "已完成"
         TaskFilter.Failed -> "失败"
+        TaskFilter.Canceled -> "已取消"
     }
 
 private val DownloadTaskStage.label: String
@@ -517,6 +531,7 @@ private val DownloadTaskStage.label: String
         DownloadTaskStage.Paused -> "已暂停"
         DownloadTaskStage.Completed -> "已完成"
         DownloadTaskStage.Failed -> "失败"
+        DownloadTaskStage.Canceled -> "已取消"
     }
 
 private val DownloadTaskStage.icon: ImageVector
@@ -528,6 +543,7 @@ private val DownloadTaskStage.icon: ImageVector
         DownloadTaskStage.Paused -> Icons.Rounded.Pause
         DownloadTaskStage.Completed -> Icons.Rounded.CheckCircle
         DownloadTaskStage.Failed -> Icons.Rounded.ErrorOutline
+        DownloadTaskStage.Canceled -> Icons.Rounded.Cancel
     }
 
 @Composable
@@ -535,6 +551,7 @@ private fun DownloadTaskStage.stageColor(): Color = when (this) {
         DownloadTaskStage.Completed -> MaterialTheme.colorScheme.secondary
         DownloadTaskStage.Failed -> MaterialTheme.colorScheme.error
         DownloadTaskStage.Paused -> MaterialTheme.colorScheme.tertiary
+        DownloadTaskStage.Canceled -> MaterialTheme.colorScheme.outline
         else -> MaterialTheme.colorScheme.primary
 }
 
@@ -542,15 +559,16 @@ private val DownloadTaskUi.progressDetail: String
     get() {
         if (stage == DownloadTaskStage.Completed) {
             if (isImageGalleryOutput) {
-                return completedGallerySummary ?: "图片已保存到系统相册"
+                return completedGallerySummary ?: "图片已保存"
             }
             val savedBytes = (totalBytes ?: downloadedBytes).takeIf { it > 0L }
-            return savedBytes?.let { "已保存 · ${formatBytes(it)}" } ?: "已保存到系统媒体库"
+            return savedBytes?.let { "已保存 · ${formatBytes(it)}" } ?: "文件已保存"
         }
         if (stage == DownloadTaskStage.Failed) return "下载未完成，可重试或查看错误原因"
+        if (stage == DownloadTaskStage.Canceled) return "任务已取消，可重新下载或移除记录"
         if (stage == DownloadTaskStage.Merging) return "媒体已下载，正在合并音视频…"
         if (stage == DownloadTaskStage.Resolving) return "正在重新确认媒体地址…"
-        if (stage == DownloadTaskStage.Queued) return "等待可用下载槽位…"
+        if (stage == DownloadTaskStage.Queued) return errorMessage?.takeIf(String::isNotBlank) ?: "等待可用下载槽位…"
 
         val parts = mutableListOf<String>()
         if (downloadedBytes > 0L || totalBytes != null) {

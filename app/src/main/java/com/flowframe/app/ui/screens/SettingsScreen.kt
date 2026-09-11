@@ -37,12 +37,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import com.flowframe.app.ui.components.FlowFrameBrandHeader
 import com.flowframe.app.ui.components.StatePanel
 import com.flowframe.app.ui.model.SettingsUiState
@@ -54,7 +58,7 @@ fun SettingsScreen(
     onOutputDirectoryRequested: () -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
     onMaxConcurrentChanged: (Int) -> Unit,
-    onCredentialsRequested: () -> Unit,
+    onResetOutputDirectoryRequested: () -> Unit,
     onThemeModeChanged: (ThemeMode) -> Unit,
     onDynamicColorChanged: (Boolean) -> Unit,
     onDiagnosticsRequested: () -> Unit,
@@ -68,17 +72,16 @@ fun SettingsScreen(
     ) {
         item {
             FlowFrameBrandHeader(
-                title = "偏好设置",
-                subtitle = "按你的方式保存",
+                title = "下载与外观",
             )
         }
 
         item {
             Column {
-                Text("设置", style = MaterialTheme.typography.headlineSmall)
+                Text("保存设置", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    text = "权限只会在实际需要时请求。",
+                    text = "选择保存目录、网络条件与界面外观。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -106,15 +109,22 @@ fun SettingsScreen(
                     subtitle = state.outputDirectoryLabel,
                     onClick = onOutputDirectoryRequested,
                 )
+                if (state.customOutputDirectory) {
+                    TextButton(
+                        onClick = onResetOutputDirectoryRequested,
+                        modifier = Modifier.padding(start = 58.dp, bottom = 4.dp),
+                    ) { Text("恢复系统默认目录") }
+                }
                 SectionDivider()
                 SettingRow(
                     icon = Icons.Rounded.Wifi,
                     title = "仅使用 Wi‑Fi",
-                    subtitle = "移动网络下暂停新任务",
+                    subtitle = "任务仅在 Wi-Fi 连接下下载",
                     trailing = {
                         Switch(
                             checked = state.wifiOnly,
                             onCheckedChange = onWifiOnlyChanged,
+                            modifier = Modifier.semantics { contentDescription = "仅使用 Wi-Fi" },
                         )
                     },
                 )
@@ -134,21 +144,6 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(title = "访问凭据") {
-                SettingRow(
-                    icon = Icons.Rounded.Key,
-                    title = "Cookie 与登录凭据",
-                    subtitle = if (state.credentialsConfigured) {
-                        "已配置 · 用于需要登录态的内容"
-                    } else {
-                        "未配置 · 普通公开视频无需设置"
-                    },
-                    onClick = onCredentialsRequested,
-                )
-            }
-        }
-
-        item {
             SettingsSection(title = "外观") {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                     Row(
@@ -159,7 +154,7 @@ fun SettingsScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text("主题模式", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "品牌配色在深浅模式下都会保持清晰",
+                                "跟随设备设置，或固定使用浅色、深色",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -184,11 +179,13 @@ fun SettingsScreen(
                 SettingRow(
                     icon = Icons.Rounded.Palette,
                     title = "系统动态配色",
-                    subtitle = "使用设备壁纸生成的颜色",
+                    subtitle = if (state.dynamicColorAvailable) "使用设备壁纸生成的颜色" else "需要 Android 12 或更高版本",
                     trailing = {
                         Switch(
-                            checked = state.dynamicColor,
+                            checked = state.dynamicColor && state.dynamicColorAvailable,
                             onCheckedChange = onDynamicColorChanged,
+                            enabled = state.dynamicColorAvailable,
+                            modifier = Modifier.semantics { contentDescription = "系统动态配色" },
                         )
                     },
                 )
@@ -200,14 +197,14 @@ fun SettingsScreen(
                 SettingRow(
                     icon = Icons.Rounded.BugReport,
                     title = "诊断信息",
-                    subtitle = "查看解析器、任务和设备状态",
+                    subtitle = "查看与复制设备、解析器和任务状态",
                     onClick = onDiagnosticsRequested,
                 )
                 SectionDivider()
                 SettingRow(
                     icon = Icons.Rounded.Info,
                     title = "关于流影",
-                    subtitle = "FlowFrame ${state.versionLabel} · 开源许可与隐私说明",
+                    subtitle = "${state.versionLabel} · 开源许可与隐私说明",
                     onClick = onAboutRequested,
                 )
             }
@@ -229,7 +226,7 @@ private fun SettingsSection(
         )
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
             shape = MaterialTheme.shapes.large,
         ) {
@@ -313,7 +310,7 @@ private fun CounterControl(
             IconButton(
                 onClick = { onValueChanged((value - 1).coerceAtLeast(1)) },
                 enabled = value > 1,
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(Icons.Rounded.Remove, contentDescription = "减少并发任务")
             }
@@ -324,7 +321,7 @@ private fun CounterControl(
             IconButton(
                 onClick = { onValueChanged((value + 1).coerceAtMost(3)) },
                 enabled = value < 3,
-                modifier = Modifier.size(38.dp),
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(Icons.Rounded.Add, contentDescription = "增加并发任务")
             }

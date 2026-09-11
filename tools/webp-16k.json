@@ -1,0 +1,22 @@
+{
+  "source": {
+    "version": "1.6.0",
+    "url": "https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.tar.gz",
+    "sha256": "93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136",
+    "commit": "4fa21912338357f89e4fd51cf2368325b59e9bd9"
+  },
+  "upstreamAar": {
+    "coordinate": "io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1",
+    "url": "https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/ffmpeg/0.18.1/ffmpeg-0.18.1.aar",
+    "sha256": "0a87ffa6cf912b0fe76c1a99b9107f543ee2f247935fae2c71f0822eb7bc5f49"
+  },
+  "build": {
+    "ndkVersion": "28.2.13676358",
+    "cmakeVersion": "3.22.1",
+    "androidApi": 24,
+    "linkerFlags": "-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384",
+    "stripFlags": "--strip-unneeded",
+    "abis": ["arm64-v8a", "x86_64"],
+    "libraryNames": ["libsharpyuv.so", "libwebpdecoder.so", "libwebp.so", "libwebpdemux.so", "libwebpmux.so"]
+  }
+}

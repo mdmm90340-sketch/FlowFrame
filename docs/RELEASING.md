@@ -39,20 +39,23 @@ $env:FLOWFRAME_SIGNING_PROPERTIES = "C:\Users\your-name\Documents\FlowFrame-priv
 .\gradlew.bat testDebugUnitTest lintRelease assembleRelease
 ```
 
-确认输出只包含 `arm64-v8a`，并使用 Android Build Tools 验证签名和 16 KiB 对齐：
+确认输出只包含 `arm64-v8a`，并验证签名、ZIP 对齐及嵌套原生库：
 
 ```powershell
 $FlowFrameBuildTools = "$env:LOCALAPPDATA\Android\Sdk\build-tools\35.0.0"
 & "$FlowFrameBuildTools\apksigner.bat" verify --verbose --print-certs app\build\outputs\apk\release\app-release.apk
 & "$FlowFrameBuildTools\zipalign.exe" -c -P 16 -v 4 app\build\outputs\apk\release\app-release.apk
+python tools/verify_apk_native.py app/build/outputs/apk/release/app-release.apk
 Get-FileHash -Algorithm SHA256 app\build\outputs\apk\release\app-release.apk
 ```
+
+ZIP 对齐通过不代表 ELF 或运行时兼容。原生校验器递归检查压缩的 FFmpeg/Python payload，分别报告 LOAD 与 GNU_RELRO；必须处理失败项，并在实际 16 KiB 页大小环境运行媒体流程，才能将 16 KiB 列为验收通过。1.2.0 本地测试版仍有上游 RELRO 对齐缺口，详见 [验收报告](VERIFICATION-1.2.0.md)，不能按完整兼容版本公开发布。
 
 随后在 arm64 实体设备使用 `adb install -r` 覆盖安装，完成受影响平台、任务状态、媒体打开/分享、取消/重试和历史兼容回归。
 
 ## 4. 提交与标签
 
-确保工作区只包含计划发布的源码和文档，CI 通过后创建带说明的标签。版本号示例：
+仅本地交付时停留在本地提交与归档，不执行以下远程发布步骤。公开发布需单独获得授权，并确保工作区只包含计划发布的源码和文档、所承诺的验收已经通过。版本号示例：
 
 ```powershell
 git tag -a v1.1.2 -m "FlowFrame 1.1.2"

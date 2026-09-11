@@ -29,6 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import coil.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,7 +46,6 @@ import com.flowframe.app.ui.theme.FlowGradientStart
 @Composable
 fun FlowFrameBrandHeader(
     title: String,
-    subtitle: String,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -49,28 +53,17 @@ fun FlowFrameBrandHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        FlowFrameLogo()
+        FlowFrameLogo(Modifier.size(32.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = "流影",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = "FlowFrame",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -131,6 +124,9 @@ fun MediaArtwork(
     platform: MediaPlatform,
     title: String,
     modifier: Modifier = Modifier,
+    thumbnailUrl: String? = null,
+    showTitle: Boolean = true,
+    contentScale: ContentScale = ContentScale.Crop,
 ) {
     val accent = platformAccent(platform)
     Box(
@@ -153,24 +149,34 @@ fun MediaArtwork(
                 .size(58.dp),
             tint = Color.White.copy(alpha = 0.9f),
         )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
-                    ),
-                )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        if (!thumbnailUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = thumbnailUrl,
+                contentDescription = "$title 的封面",
+                contentScale = contentScale,
+                modifier = Modifier.fillMaxSize(),
             )
+        }
+        if (showTitle) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
+                        ),
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -243,7 +249,7 @@ fun SectionHeading(
     modifier: Modifier = Modifier,
     eyebrow: String? = null,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().semantics { heading() }) {
         if (eyebrow != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -272,6 +278,9 @@ val MediaPlatform.label: String
     get() = when (this) {
         MediaPlatform.Douyin -> "抖音"
         MediaPlatform.Bilibili -> "哔哩哔哩"
+        MediaPlatform.Xiaohongshu -> "小红书"
+        MediaPlatform.Weibo -> "微博"
+        MediaPlatform.Kuaishou -> "快手"
         MediaPlatform.Unknown -> "未知来源"
     }
 
@@ -279,5 +288,8 @@ val MediaPlatform.label: String
 fun platformAccent(platform: MediaPlatform): Color = when (platform) {
     MediaPlatform.Douyin -> DouyinAccent
     MediaPlatform.Bilibili -> BilibiliAccent
+    MediaPlatform.Xiaohongshu -> Color(0xFFE34C69)
+    MediaPlatform.Weibo -> Color(0xFFD98620)
+    MediaPlatform.Kuaishou -> Color(0xFFE7793F)
     MediaPlatform.Unknown -> MaterialTheme.colorScheme.primary
 }

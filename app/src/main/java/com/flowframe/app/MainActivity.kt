@@ -1,7 +1,6 @@
 package com.flowframe.app
 
 import android.Manifest
-import android.content.ClipDescription
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -16,20 +15,38 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.flowframe.app.ui.FlowFrameApp
 import com.flowframe.app.ui.FlowFrameCallbacks
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private val directoryPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    val folder = DocumentFile.fromTreeUri(this@MainActivity, uri)
+                    require(folder != null && folder.canWrite()) { "所选目录无法写入" }
+                    folder.name ?: "自选保存目录"
+                }
+            }
+            result.onSuccess { viewModel.setOutputDirectory(uri.toString(), it) }
+                .onFailure { Toast.makeText(this@MainActivity, "无法保留目录授权，请选择本机可写入的目录", Toast.LENGTH_LONG).show() }
+        }
+    }
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
@@ -50,10 +67,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleIntent(intent)
+        if (savedInstanceState == null) handleIntent(intent)
 
         setContent {
-            val uiState by viewModel.uiState.collectAsState()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             FlowFrameApp(uiState = uiState, callbacks = callbacks)
         }
 
@@ -66,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        viewModel.refreshOutputDirectory()
         val clipboard = getSystemService(ClipboardManager::class.java)
         val hasText = clipboard.hasPrimaryClip() &&
             clipboard.primaryClipDescription?.hasMimeType("text/*") == true
@@ -114,7 +132,7 @@ class MainActivity : ComponentActivity() {
             ?.coerceToText(this)
             ?.toString()
         if (text.isNullOrBlank()) {
-            Toast.makeText(this, "剪贴板里没有文字", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this@MainActivity, "剪贴板里没有文字", Toast.LENGTH_SHORT).show()
         } else {
             viewModel.acceptSharedText(text)
         }
@@ -132,27 +150,44 @@ class MainActivity : ComponentActivity() {
     private fun handleEvent(event: MainViewModel.UiEvent) {
         when (event) {
             is MainViewModel.UiEvent.Message ->
-                Toast.makeText(this, event.text, Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, event.text, Toast.LENGTH_LONG).show()
             is MainViewModel.UiEvent.OpenMedia -> openMedia(event.location)
             is MainViewModel.UiEvent.ShareMedia -> shareMedia(event.locations)
+            is MainViewModel.UiEvent.ChooseOutputDirectory -> directoryPicker.launch(event.currentUri?.let(Uri::parse))
+            is MainViewModel.UiEvent.CopyText -> {
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("流影诊断", event.text))
+                Toast.makeText(this@MainActivity, "诊断信息已复制", Toast.LENGTH_SHORT).show()
+            }
+            is MainViewModel.UiEvent.OpenUrl -> runCatching {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(event.url)))
+            }.onFailure { Toast.makeText(this@MainActivity, "没有找到可打开网页的应用", Toast.LENGTH_SHORT).show() }
         }
     }
 
     private fun openMedia(location: String) {
-        val uri = location.toShareableUri() ?: return
+        lifecycleScope.launch {
+        val uri = withContext(Dispatchers.IO) { location.toShareableUri() } ?: run {
+            Toast.makeText(this@MainActivity, "文件已移动、删除或访问授权失效", Toast.LENGTH_LONG).show()
+            return@launch
+        }
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, resolveMimeType(uri, location))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { startActivity(intent) }
-            .onFailure { Toast.makeText(this, "没有找到可打开此文件的应用", Toast.LENGTH_SHORT).show() }
+            .onFailure { Toast.makeText(this@MainActivity, "没有找到可打开此文件的应用", Toast.LENGTH_SHORT).show() }
+        }
     }
 
     private fun shareMedia(locations: List<String>) {
-        val items = locations.mapNotNull { location ->
+        lifecycleScope.launch {
+        val items = withContext(Dispatchers.IO) { locations.mapNotNull { location ->
             location.toShareableUri()?.let { uri -> SharedMedia(uri, resolveMimeType(uri, location)) }
+        } }
+        if (items.size != locations.size || items.isEmpty()) {
+            Toast.makeText(this@MainActivity, "部分文件已移动、删除或授权失效，无法完整分享", Toast.LENGTH_LONG).show()
+            return@launch
         }
-        if (items.isEmpty()) return
         val intent = if (items.size == 1) {
             Intent(Intent.ACTION_SEND).apply {
                 type = items.single().mimeType
@@ -173,7 +208,8 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         runCatching { startActivity(Intent.createChooser(intent, "分享媒体")) }
-            .onFailure { Toast.makeText(this, "暂时无法分享这个文件", Toast.LENGTH_SHORT).show() }
+            .onFailure { Toast.makeText(this@MainActivity, "暂时无法分享这个文件", Toast.LENGTH_SHORT).show() }
+        }
     }
 
     private fun commonMimeType(types: List<String>): String {
@@ -184,17 +220,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun String.toShareableUri(): Uri? {
-        if (startsWith("content://")) return Uri.parse(this)
+        if (startsWith("content://")) return runCatching {
+            val uri = Uri.parse(this)
+            contentResolver.openAssetFileDescriptor(uri, "r")?.use { uri }
+        }.getOrNull()
         val file = File(this)
-        if (!file.isFile) {
-            Toast.makeText(this@MainActivity, "文件已经移动或删除", Toast.LENGTH_SHORT).show()
-            return null
-        }
-        return FileProvider.getUriForFile(
+        if (!file.isFile) return null
+        return runCatching { FileProvider.getUriForFile(
             this@MainActivity,
             "${BuildConfig.APPLICATION_ID}.files",
             file,
-        )
+        ) }.getOrNull()
     }
 
     private fun resolveMimeType(uri: Uri, location: String): String =

@@ -6,6 +6,9 @@ import kotlinx.serialization.Serializable
 enum class Platform {
     DOUYIN,
     BILIBILI,
+    XIAOHONGSHU,
+    WEIBO,
+    KUAISHOU,
 }
 
 @Serializable
@@ -55,6 +58,21 @@ data class MediaPreview(
     val mediaKind: MediaKind = MediaKind.VIDEO,
     val imageCount: Int = 0,
     val hasAudio: Boolean = false,
+    val imageUrls: List<String> = emptyList(),
+    val formats: List<MediaFormat> = emptyList(),
+) {
+    val stableKey: String get() = "${platform.name}:$mediaId"
+}
+
+@Serializable
+data class MediaFormat(
+    val id: String = "",
+    val ext: String = "",
+    val width: Int = 0,
+    val height: Int = 0,
+    val videoCodec: String? = null,
+    val audioCodec: String? = null,
+    val filesizeBytes: Long = 0,
 )
 
 @Serializable
@@ -79,6 +97,11 @@ data class DownloadTask(
     val mediaKind: MediaKind = MediaKind.VIDEO,
     val galleryOutputMode: GalleryOutputMode? = null,
     val outputLocations: List<String> = emptyList(),
+    val selectedImageIndices: List<Int>? = null,
+    val outputDirectoryUri: String? = null,
+    val downloadedBytes: Long = 0,
+    val totalBytes: Long? = null,
+    val bytesPerSecond: Long? = null,
 ) {
     /**
      * New gallery tasks can publish several MediaStore items. Legacy video tasks only have

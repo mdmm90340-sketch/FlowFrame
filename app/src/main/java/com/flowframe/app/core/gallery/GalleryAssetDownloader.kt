@@ -6,12 +6,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.net.InetAddress
-import java.net.URI
 import javax.net.ssl.HttpsURLConnection
+import kotlin.coroutines.cancellation.CancellationException
 
 class GalleryAssetDownloader {
     suspend fun downloadImages(
@@ -25,9 +26,12 @@ class GalleryAssetDownloader {
         try {
             gallery.images.forEachIndexed { index, source ->
                 currentCoroutineContext().ensureActive()
-                val output = File(directory, "%03d.webp".format(index + 1))
-                downloadFromMirrors(source.mirrors, output, MAX_IMAGE_BYTES)
-                validateImage(output)
+                val temporary = File(directory, "%03d.image".format(index + 1))
+                downloadFromMirrors(source.mirrors, temporary, MAX_IMAGE_BYTES, gallery.referer) { validateImage(it) }
+                currentCoroutineContext().ensureActive()
+                val type = imageType(temporary)
+                val output = File(directory, "%03d.%s".format(index + 1, type.extension))
+                check(temporary.renameTo(output)) { "无法保存图文图片" }
                 results += output
                 onProgress(index + 1, gallery.images.size)
             }
@@ -47,8 +51,7 @@ class GalleryAssetDownloader {
         require(directory.exists() || directory.mkdirs()) { "无法创建图文暂存目录" }
         val output = File(directory, fileName)
         try {
-            downloadFromMirrors(audio.mirrors, output, MAX_AUDIO_BYTES)
-            validateAudio(output)
+            downloadFromMirrors(audio.mirrors, output, MAX_AUDIO_BYTES, audio.referer) { validateAudio(it) }
             output
         } catch (error: Throwable) {
             output.delete()
@@ -60,6 +63,8 @@ class GalleryAssetDownloader {
         mirrors: List<String>,
         destination: File,
         maxBytes: Long,
+        referer: String,
+        validate: (File) -> Unit,
     ) {
         var lastFailure: Throwable? = null
         for (mirror in mirrors.distinct()) {
@@ -67,7 +72,9 @@ class GalleryAssetDownloader {
             val partial = File(destination.parentFile, "${destination.name}.part")
             partial.delete()
             try {
-                downloadOne(mirror, partial, maxBytes)
+                downloadOne(mirror, partial, maxBytes, referer)
+                currentCoroutineContext().ensureActive()
+                validate(partial)
                 if (!partial.renameTo(destination)) {
                     partial.copyTo(destination, overwrite = true)
                     partial.delete()
@@ -75,6 +82,7 @@ class GalleryAssetDownloader {
                 return
             } catch (error: Throwable) {
                 partial.delete()
+                if (error is CancellationException) throw error
                 currentCoroutineContext().ensureActive()
                 lastFailure = error
             }
@@ -82,8 +90,9 @@ class GalleryAssetDownloader {
         throw IllegalStateException("所有媒体镜像都暂时不可用", lastFailure)
     }
 
-    private suspend fun downloadOne(rawUrl: String, destination: File, maxBytes: Long) {
-        var current = validateRemoteUri(rawUrl)
+    @OptIn(InternalCoroutinesApi::class)
+    private suspend fun downloadOne(rawUrl: String, destination: File, maxBytes: Long, referer: String) {
+        var current = RemoteMediaUrls.validate(rawUrl)
         repeat(MAX_REDIRECTS + 1) { redirectCount ->
             currentCoroutineContext().ensureActive()
             val connection = (current.toURL().openConnection() as? HttpsURLConnection)
@@ -93,8 +102,11 @@ class GalleryAssetDownloader {
             connection.readTimeout = READ_TIMEOUT_MILLIS
             connection.requestMethod = "GET"
             connection.setRequestProperty("User-Agent", USER_AGENT)
-            connection.setRequestProperty("Referer", "https://www.douyin.com/")
-            connection.setRequestProperty("Accept", "image/avif,image/webp,image/*,audio/mpeg,*/*;q=0.8")
+            connection.setRequestProperty("Referer", referer)
+            connection.setRequestProperty("Accept", "image/webp,image/png,image/jpeg,audio/mpeg,*/*;q=0.8")
+            val cancellation = currentCoroutineContext()[Job]?.invokeOnCompletion(onCancelling = true, invokeImmediately = true) { cause ->
+                if (cause != null) connection.disconnect()
+            }
             try {
                 val response = connection.responseCode
                 if (response in 300..399) {
@@ -103,7 +115,7 @@ class GalleryAssetDownloader {
                     }
                     val location = connection.getHeaderField("Location")
                         ?: throw IllegalStateException("媒体镜像返回了无效重定向")
-                    current = validateRemoteUri(current.resolve(location).toString())
+                    current = RemoteMediaUrls.validate(current.resolve(location).toString())
                     return@repeat
                 }
                 if (response !in 200..299) {
@@ -136,42 +148,19 @@ class GalleryAssetDownloader {
                 }
                 return
             } finally {
+                cancellation?.dispose()
                 connection.disconnect()
             }
         }
     }
 
-    private fun validateRemoteUri(rawUrl: String): URI {
-        val uri = runCatching { URI(rawUrl) }
-            .getOrElse { throw IllegalArgumentException("媒体地址格式无效") }
-        require(uri.scheme.equals("https", ignoreCase = true)) { "媒体地址必须使用 HTTPS" }
-        require(uri.rawUserInfo == null) { "媒体地址不能包含账号信息" }
-        require(uri.port == -1 || uri.port == 443) { "媒体地址不能使用非标准端口" }
-        val host = uri.host?.trimEnd('.')?.lowercase()
-            ?: throw IllegalArgumentException("媒体地址缺少域名")
-        require(host.contains('.') && host != "localhost" && !host.endsWith(".local")) {
-            "媒体地址域名无效"
-        }
-        require(!host.matches(IPV4_PATTERN) && !host.startsWith("[") && !host.endsWith("]")) {
-            "媒体地址不能直接使用 IP"
-        }
-        // Signed asset hosts may change between mirrors. Resolve them, but never allow
-        // loopback, site-local or link-local destinations.
-        val addresses = runCatching { InetAddress.getAllByName(host).toList() }
-            .getOrElse { throw IllegalStateException("媒体域名暂时无法解析") }
-        require(addresses.isNotEmpty() && addresses.none {
-            it.isAnyLocalAddress || it.isLoopbackAddress || it.isLinkLocalAddress ||
-                it.isSiteLocalAddress || it.isMulticastAddress
-        }) { "媒体地址指向了不安全的网络位置" }
-        return uri
-    }
-
     private fun validateImage(file: File) {
+        val type = imageType(file)
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, options)
         require(options.outWidth > 0 && options.outHeight > 0) { "下载的图片无法解码" }
-        require(options.outMimeType.equals("image/webp", ignoreCase = true)) {
-            "下载的图片不是预期的 WebP 格式"
+        require(options.outMimeType.equals(type.mimeType, ignoreCase = true)) {
+            "下载的图片类型与内容不一致"
         }
         require(options.outWidth <= MAX_IMAGE_DIMENSION && options.outHeight <= MAX_IMAGE_DIMENSION) {
             "图片尺寸超过安全限制"
@@ -188,6 +177,11 @@ class GalleryAssetDownloader {
             BitmapFactory.Options().apply { inSampleSize = sampleSize },
         ) ?: throw IllegalStateException("下载的图片像素数据不完整")
         decoded.recycle()
+    }
+
+    private fun imageType(file: File): ImageMediaType {
+        val header = file.inputStream().use { input -> ByteArray(12).let { bytes -> bytes.copyOf(input.read(bytes).coerceAtLeast(0)) } }
+        return ImageMediaType.fromHeader(header) ?: throw IllegalArgumentException("图片不是支持的 JPEG、PNG 或 WebP 格式")
     }
 
     private fun validateAudio(file: File) {
@@ -215,7 +209,7 @@ class GalleryAssetDownloader {
         require(directory.mkdirs()) { "无法创建图文暂存目录" }
     }
 
-    class HttpStatusException(val statusCode: Int) : Exception("媒体服务器返回 $statusCode")
+    class HttpStatusException(val statusCode: Int) : Exception("HTTP Error $statusCode: 媒体服务器拒绝请求")
 
     companion object {
         private const val CONNECT_TIMEOUT_MILLIS = 20_000
@@ -228,6 +222,5 @@ class GalleryAssetDownloader {
         private const val MAX_VALIDATION_PIXELS = 4_000_000L
         private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36"
-        private val IPV4_PATTERN = Regex("""\d{1,3}(?:\.\d{1,3}){3}""")
     }
 }

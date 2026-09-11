@@ -16,6 +16,8 @@ data class AppSettings(
     val maxConcurrentDownloads: Int = 2,
     val theme: ThemePreference = ThemePreference.SYSTEM,
     val dynamicColor: Boolean = false,
+    val outputDirectoryUri: String? = null,
+    val outputDirectoryName: String? = null,
 )
 
 class AppSettingsStore(context: Context) {
@@ -34,6 +36,10 @@ class AppSettingsStore(context: Context) {
 
     fun setDynamicColor(value: Boolean) = update(_state.value.copy(dynamicColor = value))
 
+    fun setOutputDirectory(uri: String?, name: String?) = update(
+        _state.value.copy(outputDirectoryUri = uri, outputDirectoryName = name),
+    )
+
     private fun read(): AppSettings = AppSettings(
         wifiOnly = preferences.getBoolean(KEY_WIFI_ONLY, false),
         maxConcurrentDownloads = preferences.getInt(KEY_MAX_CONCURRENT, 2).coerceIn(1, 3),
@@ -41,6 +47,8 @@ class AppSettingsStore(context: Context) {
             ThemePreference.valueOf(preferences.getString(KEY_THEME, ThemePreference.SYSTEM.name).orEmpty())
         }.getOrDefault(ThemePreference.SYSTEM),
         dynamicColor = preferences.getBoolean(KEY_DYNAMIC_COLOR, false),
+        outputDirectoryUri = preferences.getString(KEY_OUTPUT_URI, null),
+        outputDirectoryName = preferences.getString(KEY_OUTPUT_NAME, null),
     )
 
     private fun update(value: AppSettings) {
@@ -49,6 +57,8 @@ class AppSettingsStore(context: Context) {
             .putInt(KEY_MAX_CONCURRENT, value.maxConcurrentDownloads)
             .putString(KEY_THEME, value.theme.name)
             .putBoolean(KEY_DYNAMIC_COLOR, value.dynamicColor)
+            .putString(KEY_OUTPUT_URI, value.outputDirectoryUri)
+            .putString(KEY_OUTPUT_NAME, value.outputDirectoryName)
             .apply()
         _state.value = value
     }
@@ -58,6 +68,7 @@ class AppSettingsStore(context: Context) {
         const val KEY_MAX_CONCURRENT = "max_concurrent"
         const val KEY_THEME = "theme"
         const val KEY_DYNAMIC_COLOR = "dynamic_color"
+        const val KEY_OUTPUT_URI = "output_directory_uri"
+        const val KEY_OUTPUT_NAME = "output_directory_name"
     }
 }
-

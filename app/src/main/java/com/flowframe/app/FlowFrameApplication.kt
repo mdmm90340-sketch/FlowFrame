@@ -5,6 +5,7 @@ import com.flowframe.app.core.engine.DownloadEngine
 import com.flowframe.app.data.DownloadRepository
 import com.flowframe.app.data.AppSettingsStore
 import com.flowframe.app.data.TaskStore
+import com.flowframe.app.data.NetworkMonitor
 import com.flowframe.app.worker.DownloadConcurrencyGate
 import com.flowframe.app.worker.DownloadNotifications
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +29,7 @@ class AppContainer(application: Application) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val taskStore = TaskStore(application)
     val settingsStore = AppSettingsStore(application)
+    val networkMonitor = NetworkMonitor(application, appScope)
     val engine = DownloadEngine(application)
     val downloadGate = DownloadConcurrencyGate {
         settingsStore.state.value.maxConcurrentDownloads

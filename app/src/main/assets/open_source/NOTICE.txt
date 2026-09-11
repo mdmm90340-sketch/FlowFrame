@@ -1,4 +1,4 @@
-FlowFrame / 流影 1.1.2
+FlowFrame / 流影下载 1.2.0
 
 Copyright (C) 2026 FlowFrame contributors
 
@@ -9,7 +9,11 @@ Core third-party components:
 - youtubedl-android 0.18.1 (GPL-3.0)
 - yt-dlp 2026.08.19, commit 3a08beaf031ab68f966401ead017ac81fe8486cf (Unlicense)
 - FFmpeg (LGPL/GPL depending on build configuration)
+- libwebp 1.6.0 (BSD-style license and patent grant), rebuilt from pinned official
+  source with Android NDK 28.2.13676358 for 16 KiB ELF alignment. Five libraries
+  per ABI are replaced; FFmpeg and the other native payloads retain their versions.
 - AndroidX / Jetpack Compose / Kotlin (Apache-2.0)
+- Coil 2.7.0 / OkHttp (Apache-2.0)
 
 Pinned Douyin compatibility kernel:
 - Source patch: IvanaGyro/yt-dlp commit 73d89b829ed21493e832561ffbee20d08c6e662e
@@ -26,6 +30,8 @@ License copies:
 - LICENSE-UNLICENSE-YT-DLP.txt
 - LICENSE-MIT-PY-GMSSL.txt
 - LICENSE-APACHE-2.0-F2.txt
+- LICENSE-BSD-WEBP.txt and PATENTS-WEBP.txt
+- WEBP-NATIVE-MANIFEST.json records source, toolchain, ABI and library hashes.
 
 Source and exact build versions are distributed with the APK delivery package.
 Platform names and trademarks belong to their respective owners.

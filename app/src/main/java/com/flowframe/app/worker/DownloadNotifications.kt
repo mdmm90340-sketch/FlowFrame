@@ -68,7 +68,7 @@ object DownloadNotifications {
         )
         val progress = (task.progress.coerceIn(0f, 1f) * 100).toInt()
         val content = when (task.stage) {
-            TaskStage.QUEUED -> "等待开始"
+            TaskStage.QUEUED -> task.errorMessage ?: "等待开始"
             TaskStage.RESOLVING -> "正在准备"
             TaskStage.DOWNLOADING -> "正在下载 · $progress%"
             TaskStage.MERGING -> if (task.mediaKind == MediaKind.GALLERY) {

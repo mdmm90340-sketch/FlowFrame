@@ -26,7 +26,7 @@ class SupportedUrlInputNormalizationTest {
     @Test
     fun ignoresInvalidLinksWhenOneSupportedLinkRemains() {
         val result = SupportedUrlParser.normalize(
-            "http://b23.tv/unsafe https://example.com/unsupported " +
+            "http://www.bilibili.com/video/BV17fTF6EEAc https://example.com/unsupported " +
                 "https://v.douyin.com/DemoVideo_01/。",
         )
 

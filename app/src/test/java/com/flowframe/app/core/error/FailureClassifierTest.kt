@@ -11,6 +11,19 @@ import org.junit.Test
 
 class FailureClassifierTest {
     @Test
+    fun doesNotHideKnownFailureBehindExtractorExceptionType() {
+        assertKind(FailureKind.LOGIN_REQUIRED, "ExtractorError: Login required")
+        assertKind(FailureKind.FORMAT_UNAVAILABLE, "ExtractorError: No video formats found")
+        assertKind(FailureKind.NETWORK, "ExtractorError: Connection reset")
+    }
+
+    @Test
+    fun redactsDomesticPlatformShareSecrets() {
+        val result = FailureClassifier.sanitizeDiagnostic("xsec_token=fixture-secret shareToken=another-secret")
+        assertFalse(result.contains("fixture-secret"))
+        assertFalse(result.contains("another-secret"))
+    }
+    @Test
     fun distinguishesLoginFromPrivateContent() {
         assertKind(FailureKind.LOGIN_REQUIRED, "Login required. Use --cookies to authenticate")
         assertKind(FailureKind.PRIVATE_OR_REMOVED, "ERROR: This video is private")
@@ -60,6 +73,22 @@ class FailureClassifierTest {
         assertKind(FailureKind.FFMPEG, "FFmpegPostProcessorError: postprocessing failed")
         assertKind(FailureKind.STORAGE_FULL, "java.io.IOException: ENOSPC (No space left on device)")
         assertKind(FailureKind.STORAGE_PERMISSION, "java.io.FileNotFoundException: Permission denied")
+    }
+
+    @Test
+    fun lostDirectoryGrantsAndUnwritableTreesGiveAnActionableRecoveryMessage() {
+        listOf(
+            "保存目录授权已失效，请在保存设置中重新选择目录",
+            "保存目录无法写入，请在保存设置中重新选择目录",
+            "无法在所选目录中创建媒体文件",
+            "无法写入所选保存目录",
+        ).forEach { message ->
+            val failure = FailureClassifier.classify(IllegalArgumentException(message), FailureOperation.DOWNLOAD)
+            assertEquals(FailureKind.STORAGE_PERMISSION, failure.kind)
+            assertTrue(failure.userMessage.contains("重新选择目录"))
+            assertTrue(failure.userMessage.contains("恢复默认目录"))
+            assertFalse(failure.retryable)
+        }
     }
 
     @Test

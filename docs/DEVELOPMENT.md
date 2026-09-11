@@ -28,7 +28,8 @@ Linux/macOS 使用 `./gradlew`。Debug APK 位于 `app/build/outputs/apk/debug/`
 默认 APK 只包含 `arm64-v8a`。为 x86_64 Android 模拟器构建：
 
 ```powershell
-.\gradlew.bat assembleDebug -Pflowframe.testAbi=x86_64
+.\gradlew.bat assembleDebug '-Pflowframe.testAbi=x86_64'
+.\gradlew.bat assembleDebugAndroidTest '-Pflowframe.testAbi=x86_64'
 ```
 
 安装或覆盖安装测试包：
@@ -78,3 +79,27 @@ APK 内的 `app/src/main/res/raw/ytdlp` 是固定提交和三个文本补丁生�
 - `tools/`：固定内核 manifest、补丁与可复现构建脚本。
 
 更完整的数据流和模块职责见 [ARCHITECTURE.md](ARCHITECTURE.md)。正式签名和 GitHub Release 步骤见 [RELEASING.md](RELEASING.md)；正式密钥与已填写的签名配置应保存在工作区外。
+
+## 1.2.0 本地验收
+
+PowerShell 下请给带点号的 Gradle 参数加单引号，例如 `'-Pflowframe.testAbi=x86_64'`。
+使用 JDK 17，而非系统中其他版本的 Java；仅在本次构建进程设置 `JAVA_HOME`。
+模拟器须同时验证 Debug 仪器测试与经过 R8 压缩的 Release，不能用 Debug 通过代替正式包可用。
+
+```powershell
+.\gradlew.bat assembleRelease assembleReleaseAndroidTest '-Pflowframe.testAbi=x86_64' '-Pflowframe.testBuildType=release'
+```
+
+Release 仪器测试需配置本地签名；同签名安装应用与测试 APK 后，使用专用的 Android framework runner：
+
+```powershell
+adb shell am instrument -w com.flowframe.app.test/com.flowframe.app.ReleaseNativeInstrumentation
+```
+
+它启动真实主 Activity，核对安装后的原生库 SHA，并调用实际 FFmpeg 做 WebP 编解码、MP4 编码/完整解码和元数据回读。它不依赖被 R8 合并或删除的 Kotlin/AndroidX 公开类。普通 AndroidJUnitRunner 的共享依赖去重与 Release 缩减不兼容，因此 Compose、任务存储与 MainActivity 生命周期的 JUnit 用 Debug 测试包运行；正式包的完整用户流程另作真实 UI 验收。
+
+仪器测试包括 Compose 交互、实际 TaskStore 取消竞争和重载，以及程序生成图片经过 FFmpeg 合成、完整解码与 MediaStore 发布。运行时只使用新建测试 AVD，保留已有设备与数据。
+
+新模型的图片选择、目标目录和传输指标都有兼容默认值。任务完成/失败/取消为终态，重试创建新尝试；删除历史不移除媒体。修改这些行为必须同时运行 JVM 和对应设备测试。
+
+WebP 原生库来源、普通构建时的校验与重打包、NDK 重编步骤见 [WEBP-16K.md](WEBP-16K.md)。常规构建无需 NDK；不要将重建脚本的中间文件或私密签名加入 Git。

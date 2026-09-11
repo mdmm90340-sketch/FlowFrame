@@ -7,6 +7,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
@@ -18,8 +22,10 @@ object MediaPublisher {
         return if (audioOnly) publishAudio(context, source) else publishVideo(context, source)
     }
 
-    suspend fun publishVideo(context: Context, source: File): String =
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+    suspend fun publishVideo(context: Context, source: File, directoryUri: String? = null): String =
+        if (directoryUri != null) {
+            publishDocuments(context, listOf(source), directoryUri).single()
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             source.absolutePath
         } else {
             publishSingle(
@@ -31,8 +37,10 @@ object MediaPublisher {
             )
         }
 
-    suspend fun publishAudio(context: Context, source: File): String =
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+    suspend fun publishAudio(context: Context, source: File, directoryUri: String? = null): String =
+        if (directoryUri != null) {
+            publishDocuments(context, listOf(source), directoryUri).single()
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             source.absolutePath
         } else {
             publishSingle(
@@ -48,9 +56,12 @@ object MediaPublisher {
      * Publishes a gallery as one all-or-nothing transaction. Entries stay pending
      * until every source has copied successfully; any failure removes the entire set.
      */
-    suspend fun publishImages(context: Context, sources: List<File>, folderName: String): List<String> {
+    suspend fun publishImages(
+        context: Context, sources: List<File>, folderName: String, directoryUri: String? = null,
+    ): List<String> {
         require(sources.isNotEmpty()) { "没有可保存的图片" }
         sources.forEach { require(it.isFile && it.length() > 0L) { "图片暂存文件不完整" } }
+        if (directoryUri != null) return publishDocuments(context, sources, directoryUri)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return sources.map(File::getAbsolutePath)
         }
@@ -86,6 +97,59 @@ object MediaPublisher {
         } catch (error: Throwable) {
             inserted.forEach { uri -> runCatching { resolver.delete(uri, null, null) } }
             throw error
+        }
+    }
+
+    /** Persistable SAF grants belong to the selected tree, not a guessed filesystem path. */
+    private suspend fun publishDocuments(
+        context: Context,
+        sources: List<File>,
+        directoryUri: String,
+    ): List<String> {
+        val created = mutableListOf<DocumentFile>()
+        try {
+            return withContext(Dispatchers.IO) {
+                val uri = Uri.parse(directoryUri)
+                val permission = context.contentResolver.persistedUriPermissions.any {
+                    it.uri == uri && it.isWritePermission && it.isReadPermission
+                }
+                require(permission) { "保存目录授权已失效，请在保存设置中重新选择目录" }
+                val directory = DocumentFile.fromTreeUri(context, uri)
+                require(directory != null && directory.exists() && directory.canWrite()) {
+                    "保存目录无法写入，请在保存设置中重新选择目录"
+                }
+                for (source in sources) {
+                    currentCoroutineContext().ensureActive()
+                    require(source.isFile && source.length() > 0) { "媒体暂存文件不完整" }
+                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(source.extension.lowercase())
+                        ?: "application/octet-stream"
+                    val target = directory.createFile(mime, source.name)
+                        ?: throw IllegalStateException("无法在所选目录中创建媒体文件")
+                    created += target
+                    context.contentResolver.openOutputStream(target.uri, "w")?.use { output ->
+                        source.inputStream().use { copyCancelable(it, output) }
+                        output.flush()
+                    } ?: throw IllegalStateException("无法写入所选保存目录")
+                }
+                currentCoroutineContext().ensureActive()
+                created.map { it.uri.toString() }
+            }
+        } catch (error: Throwable) {
+            // Also covers cancellation while the result returns from the IO dispatcher.
+            withContext(NonCancellable + Dispatchers.IO) {
+                created.forEach { runCatching { it.delete() } }
+            }
+            throw error
+        }
+    }
+
+    fun removePublished(context: Context, location: String) {
+        if (!location.startsWith("content://")) return
+        val uri = Uri.parse(location)
+        if (uri.authority == MediaStore.AUTHORITY) {
+            context.contentResolver.delete(uri, null, null)
+        } else {
+            DocumentFile.fromSingleUri(context, uri)?.delete()
         }
     }
 

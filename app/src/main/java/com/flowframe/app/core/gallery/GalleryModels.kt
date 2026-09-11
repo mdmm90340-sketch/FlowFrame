@@ -11,6 +11,7 @@ data class GalleryAudioSource(
     val durationMillis: Long,
     val title: String? = null,
     val artist: String? = null,
+    val referer: String = "https://www.douyin.com/",
 )
 
 data class GalleryAssetSet(
@@ -21,6 +22,7 @@ data class GalleryAssetSet(
     val images: List<GalleryImageSource>,
     val audio: GalleryAudioSource?,
     val beatTimesMillis: List<Long>,
+    val referer: String = "https://www.douyin.com/",
 )
 
 data class DownloadedGalleryAssets(

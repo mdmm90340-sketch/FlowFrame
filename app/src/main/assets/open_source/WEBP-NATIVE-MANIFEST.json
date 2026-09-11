@@ -1,0 +1,259 @@
+{
+  "source": {
+    "version": "1.6.0",
+    "url": "https://github.com/webmproject/libwebp/archive/refs/tags/v1.6.0.tar.gz",
+    "sha256": "93a852c2b3efafee3723efd4636de855b46f9fe1efddd607e1f42f60fc8f2136",
+    "commit": "4fa21912338357f89e4fd51cf2368325b59e9bd9"
+  },
+  "upstreamAar": {
+    "coordinate": "io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1",
+    "url": "https://repo.maven.apache.org/maven2/io/github/junkfood02/youtubedl-android/ffmpeg/0.18.1/ffmpeg-0.18.1.aar",
+    "sha256": "0a87ffa6cf912b0fe76c1a99b9107f543ee2f247935fae2c71f0822eb7bc5f49"
+  },
+  "build": {
+    "ndkVersion": "28.2.13676358",
+    "cmakeVersion": "3.22.1",
+    "androidApi": 24,
+    "linkerFlags": "-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384",
+    "stripFlags": "--strip-unneeded",
+    "abis": [
+      "arm64-v8a",
+      "x86_64"
+    ],
+    "libraryNames": [
+      "libsharpyuv.so",
+      "libwebpdecoder.so",
+      "libwebp.so",
+      "libwebpdemux.so",
+      "libwebpmux.so"
+    ]
+  },
+  "libraries": [
+    {
+      "machine": 183,
+      "soname": "libsharpyuv.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "arm64-v8a",
+      "name": "libsharpyuv.so",
+      "sha256": "fa9febc2e9b9ce88cd387e08b7dce859f71f8f9645f8fd4dd5cb3d9d3b74cc25",
+      "exportedSymbolCount": 7,
+      "upstreamExportedSymbolCount": 7,
+      "additionalExports": []
+    },
+    {
+      "machine": 183,
+      "soname": "libwebpdecoder.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "arm64-v8a",
+      "name": "libwebpdecoder.so",
+      "sha256": "4f39a6bf6545436a5244357db0c919e0bd8dd42acd6a29962c4de284c297ee6c",
+      "exportedSymbolCount": 46,
+      "upstreamExportedSymbolCount": 46,
+      "additionalExports": []
+    },
+    {
+      "machine": 183,
+      "soname": "libwebp.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "arm64-v8a",
+      "name": "libwebp.so",
+      "sha256": "97e497b078b9ef26b5d63c932d993db517dac60613039c594dd752ff527f757a",
+      "exportedSymbolCount": 86,
+      "upstreamExportedSymbolCount": 86,
+      "additionalExports": []
+    },
+    {
+      "machine": 183,
+      "soname": "libwebpdemux.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so",
+        "libwebp.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "arm64-v8a",
+      "name": "libwebpdemux.so",
+      "sha256": "7f7835c4782375484144cd3bc4af94678a0255e33d982041ea77be2c31c0be1a",
+      "exportedSymbolCount": 20,
+      "upstreamExportedSymbolCount": 20,
+      "additionalExports": []
+    },
+    {
+      "machine": 183,
+      "soname": "libwebpmux.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so",
+        "libwebp.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "arm64-v8a",
+      "name": "libwebpmux.so",
+      "sha256": "959331380191b6e94f18019b9629efa90555608323491f98e74e4a3367a3f829",
+      "exportedSymbolCount": 27,
+      "upstreamExportedSymbolCount": 27,
+      "additionalExports": []
+    },
+    {
+      "machine": 62,
+      "soname": "libsharpyuv.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "x86_64",
+      "name": "libsharpyuv.so",
+      "sha256": "cebd76e08a7026856503f714ce4fcb5824294bd0fa1a20a2a4b4eefc639608cd",
+      "exportedSymbolCount": 7,
+      "upstreamExportedSymbolCount": 7,
+      "additionalExports": []
+    },
+    {
+      "machine": 62,
+      "soname": "libwebpdecoder.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "x86_64",
+      "name": "libwebpdecoder.so",
+      "sha256": "9508b8cf0f26c72e1b2846aa6c580df9a3a4c174d150d07ad1a388daddf40f30",
+      "exportedSymbolCount": 46,
+      "upstreamExportedSymbolCount": 46,
+      "additionalExports": []
+    },
+    {
+      "machine": 62,
+      "soname": "libwebp.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "x86_64",
+      "name": "libwebp.so",
+      "sha256": "310b49baafde838a22041fb46f37b1711de106fc2dc41fa38fc7d9e2f61d6521",
+      "exportedSymbolCount": 86,
+      "upstreamExportedSymbolCount": 86,
+      "additionalExports": []
+    },
+    {
+      "machine": 62,
+      "soname": "libwebpdemux.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so",
+        "libwebp.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "x86_64",
+      "name": "libwebpdemux.so",
+      "sha256": "6a4c3af5df58e4015ac34fa8da8e0bb909d6be173d2f227f454d5241e03701f0",
+      "exportedSymbolCount": 20,
+      "upstreamExportedSymbolCount": 20,
+      "additionalExports": []
+    },
+    {
+      "machine": 62,
+      "soname": "libwebpmux.so",
+      "needed": [
+        "libc.so",
+        "libdl.so",
+        "libm.so",
+        "libsharpyuv.so",
+        "libwebp.so"
+      ],
+      "loadAlignments": [
+        16384,
+        16384
+      ],
+      "loadOffsetsCongruent": true,
+      "relroEndsAligned": true,
+      "abi": "x86_64",
+      "name": "libwebpmux.so",
+      "sha256": "495dd74844ef51f86db54768b1a1d7c612c09afd8e561a4b23db8fb1ab8df03e",
+      "exportedSymbolCount": 27,
+      "upstreamExportedSymbolCount": 27,
+      "additionalExports": []
+    }
+  ]
+}

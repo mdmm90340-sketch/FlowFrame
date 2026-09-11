@@ -31,6 +31,10 @@ class DownloadTaskMigrationTest {
 
         assertEquals(MediaKind.VIDEO, task.mediaKind)
         assertNull(task.galleryOutputMode)
+        assertNull(task.selectedImageIndices)
+        assertNull(task.outputDirectoryUri)
+        assertEquals(0L, task.downloadedBytes)
+        assertNull(task.totalBytes)
         assertEquals(emptyList<String>(), task.outputLocations)
         assertEquals(listOf("content://media/external/video/media/1"), task.resolvedOutputLocations)
     }
@@ -47,11 +51,15 @@ class DownloadTaskMigrationTest {
             mediaKind = MediaKind.GALLERY,
             galleryOutputMode = GalleryOutputMode.IMAGES,
             outputLocations = listOf("content://image/1", "content://image/2"),
+            selectedImageIndices = listOf(0, 2),
+            outputDirectoryUri = "content://documents/tree/selected",
         )
 
         val decoded = json.decodeFromString<DownloadTask>(json.encodeToString(DownloadTask.serializer(), original))
 
         assertEquals(GalleryOutputMode.IMAGES, decoded.galleryOutputMode)
         assertEquals(original.outputLocations, decoded.resolvedOutputLocations)
+        assertEquals(listOf(0, 2), decoded.selectedImageIndices)
+        assertEquals(original.outputDirectoryUri, decoded.outputDirectoryUri)
     }
 }

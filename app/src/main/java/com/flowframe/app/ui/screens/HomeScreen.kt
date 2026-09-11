@@ -50,6 +50,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flowframe.app.ui.components.FlowFrameBrandHeader
+import com.flowframe.app.ui.components.MediaArtwork
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import com.flowframe.app.ui.components.PlatformBadge
 import com.flowframe.app.ui.components.StatePanel
 import com.flowframe.app.ui.components.label
@@ -84,20 +90,20 @@ fun HomeScreen(
     ) {
         item {
             FlowFrameBrandHeader(
-                title = "链接一贴",
-                subtitle = "清晰落地",
+                title = "链接解析 · 公开作品",
             )
         }
 
         item {
             Column {
                 Text(
-                    text = "保存此刻，保持原本的清晰。",
+                    text = "视频与图集下载",
                     style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.semantics { heading() },
                 )
                 Spacer(Modifier.height(7.dp))
                 Text(
-                    text = "支持抖音视频与图文分享，以及哔哩哔哩视频地址。",
+                    text = "粘贴作品链接，预览后选择保存内容与画质。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -119,7 +125,7 @@ fun HomeScreen(
         item {
             AnimatedContent(
                 targetState = state.parseState,
-                modifier = Modifier.animateContentSize(),
+                modifier = Modifier.animateContentSize().semantics { liveRegion = LiveRegionMode.Polite },
                 label = "parse_state",
             ) { parseState ->
                 when (parseState) {
@@ -169,9 +175,9 @@ private fun LinkComposer(
 ) {
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(
@@ -213,7 +219,7 @@ private fun LinkComposer(
                     },
                     trailingIcon = {
                         if (state.linkText.isNotBlank()) {
-                            IconButton(onClick = onClearRequested) {
+                            IconButton(onClick = onClearRequested, enabled = !parsing) {
                                 Icon(Icons.Rounded.Clear, contentDescription = "清空链接")
                             }
                         }
@@ -269,8 +275,8 @@ private fun LinkComposer(
             ) {
                 OutlinedButton(
                     onClick = onPasteRequested,
-                    enabled = state.canPaste && !parsing,
-                    modifier = Modifier.weight(0.9f),
+                    enabled = !parsing,
+                    modifier = Modifier.weight(0.9f).heightIn(min = 52.dp),
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ContentPaste,
@@ -282,7 +288,7 @@ private fun LinkComposer(
                 Button(
                     onClick = onParseRequested,
                     enabled = canParse,
-                    modifier = Modifier.weight(1.5f),
+                    modifier = Modifier.weight(1.5f).heightIn(min = 52.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                     ),
@@ -335,10 +341,10 @@ private fun SupportedSourcesCard() {
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text("两种平台，一个清爽流程", style = MaterialTheme.typography.titleMedium)
+                Text("先预览，再保存", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    text = "自动识别来源，解析后再由你选择清晰度与保存方式。",
+                    text = "视频可选择画质与音轨；图集可选图保存或合成 MP4。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -403,21 +409,13 @@ private fun RecentMediaCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(13.dp),
         ) {
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Box(
-                    modifier = Modifier.size(58.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
+            MediaArtwork(
+                platform = item.platform,
+                title = item.title,
+                thumbnailUrl = item.thumbnailUrl,
+                showTitle = false,
+                modifier = Modifier.size(64.dp),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.title,

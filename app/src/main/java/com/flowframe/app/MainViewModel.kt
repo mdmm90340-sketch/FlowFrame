@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.flowframe.app.core.engine.BundledYtDlpInstaller
 import com.flowframe.app.core.error.FailureClassifier
@@ -36,6 +37,7 @@ import com.flowframe.app.ui.model.TaskAction
 import com.flowframe.app.ui.model.TaskFilter
 import com.flowframe.app.ui.model.TaskOutputAction
 import com.flowframe.app.ui.model.ThemeMode
+import com.flowframe.app.ui.model.FlowFrameOverlay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -49,7 +51,8 @@ import kotlinx.coroutines.launch
 import java.util.Locale
 import java.lang.Character
 
-class MainViewModel(application: Application) : AndroidViewModel(application), FlowFrameCallbacks {
+class MainViewModel(application: Application, private val savedState: SavedStateHandle) :
+    AndroidViewModel(application), FlowFrameCallbacks {
     private val container = (application as FlowFrameApplication).container
     private val repository = container.repository
     private val settingsStore = container.settingsStore
@@ -59,6 +62,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     private var parseGeneration = 0L
     private var activeParseProcessId: String? = null
     private var downloadJob: Job? = null
+    private var restoringPreview: Boolean = savedState.get<String>("preview_url") != null
+    private val restoredImageSelection = savedState.get<ArrayList<Int>>("selected_images")?.toSet()
+    private val restoredPreset = savedState.get<String>("preset")
+    private val restoredAudioOnly = savedState.get<Boolean>("audio_only") ?: false
+    private val restoredGalleryMode = savedState.get<String>("gallery_mode")
 
     private val _uiState = MutableStateFlow(
         FlowFrameUiState(
@@ -74,6 +82,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
 
     init {
+        val restoredUrl = savedState.get<String>("preview_url")
+        val restoredInput = restoredUrl ?: savedState.get<String>("input").orEmpty()
+        applyNormalizedInput(restoredInput)
+        savedState.get<String>("destination")?.let { name ->
+            FlowFrameDestination.entries.firstOrNull { it.name == name }?.let { destination ->
+                _uiState.update { it.copy(selectedDestination = destination) }
+            }
+        }
+        viewModelScope.launch {
+            _uiState.collect { state ->
+                savedState["input"] = state.home.linkText
+                savedState["destination"] = state.selectedDestination.name
+                if (!restoringPreview) {
+                    savedState["preview_url"] = activePreview?.sourceUrl
+                    savedState["selected_images"] = state.activePreview?.selectedImageIndices?.let { ArrayList(it) }
+                    savedState["preset"] = state.activePreview?.selectedPresetId
+                    savedState["audio_only"] = state.activePreview?.audioOnly
+                    savedState["gallery_mode"] = state.activePreview?.selectedGalleryOutputMode?.name
+                }
+            }
+        }
+        viewModelScope.launch {
+            container.networkMonitor.state.collect { network ->
+                _uiState.update { it.copy(tasks = it.tasks.copy(
+                    isOffline = !network.connected,
+                    items = repository.tasks.value.map { task -> task.toUi() },
+                )) }
+            }
+        }
         viewModelScope.launch {
             repository.tasks.collect { tasks ->
                 _uiState.update { state ->
@@ -90,12 +127,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
                             maxConcurrentDownloads = settings.maxConcurrentDownloads,
                             themeMode = settings.theme.toUi(),
                             dynamicColor = settings.dynamicColor,
+                            dynamicColorAvailable = Build.VERSION.SDK_INT >= 31,
+                            customOutputDirectory = settings.outputDirectoryUri != null,
+                            outputDirectoryLabel = settings.outputDirectoryName ?: defaultDirectoryLabel(),
+                            outputDirectoryAvailable = directoryAvailable(settings.outputDirectoryUri),
                         ),
+                        activePreview = state.activePreview?.copy(
+                            destinationLabel = settings.outputDirectoryName ?: defaultDirectoryLabel(),
+                        ),
+                        tasks = state.tasks.copy(items = repository.tasks.value.map { it.toUi() }),
                     )
                 }
             }
         }
+        if (restoredUrl != null) onParseRequested()
     }
+
+    private fun defaultDirectoryLabel() = if (Build.VERSION.SDK_INT >= 29) {
+        "系统影片、音乐或图片 / FlowFrame"
+    } else "应用媒体目录 / FlowFrame"
+
+    private fun directoryAvailable(uri: String?): Boolean = uri == null ||
+        getApplication<Application>().contentResolver.persistedUriPermissions.any {
+            it.uri.toString() == uri && it.isWritePermission && it.isReadPermission
+        }
+
+    fun refreshOutputDirectory() {
+        _uiState.update { state -> state.copy(settings = state.settings.copy(
+            outputDirectoryAvailable = directoryAvailable(settingsStore.state.value.outputDirectoryUri),
+        )) }
+    }
+
+    fun setOutputDirectory(uri: String, name: String) { settingsStore.setOutputDirectory(uri, name) }
 
     fun acceptSharedText(text: String) {
         cancelActiveParse()
@@ -104,6 +167,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
             it.copy(
                 selectedDestination = FlowFrameDestination.Home,
                 activePreview = null,
+                overlay = null,
             )
         }
         applyNormalizedInput(text)
@@ -116,8 +180,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     }
 
     override fun onDestinationSelected(destination: FlowFrameDestination) {
-        _uiState.update { it.copy(selectedDestination = destination, activePreview = null) }
+        cancelActiveParse()
         activePreview = null
+        _uiState.update { state ->
+            state.copy(
+                selectedDestination = destination,
+                activePreview = null,
+                overlay = null,
+                home = state.home.copy(parseState = ParseUiState.Idle),
+            )
+        }
     }
 
     override fun onLinkChanged(value: String) {
@@ -134,7 +206,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
         val input = _uiState.value.home.linkText
         val supported = SupportedUrlParser.extract(input)
         if (supported == null) {
-            showParseError("没有找到可识别的抖音或 B站链接")
+            showParseError("没有找到支持的作品链接，请粘贴完整分享文案")
             return
         }
         val expectedUrl = supported.value
@@ -151,22 +223,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
                 }
                 val preview = repository.parse(expectedUrl, parseProcessId)
                 if (parseGeneration != generation || _uiState.value.home.linkText != expectedUrl) return@launch
-                previews[preview.mediaId] = preview
+                previews.remove(preview.stableKey)
+                previews[preview.stableKey] = preview
                 while (previews.size > 8) previews.remove(previews.keys.first())
                 activePreview = preview
                 _uiState.update { state ->
                     val recent = previews.values.toList().asReversed().take(3).map { it.toRecentUi() }
                     state.copy(
                         home = state.home.copy(parseState = ParseUiState.Idle, recentItems = recent),
-                        activePreview = preview.toPreviewUi(),
+                        activePreview = preview.toPreviewUi().let { ui ->
+                            if (!restoringPreview) ui else ui.copy(
+                                selectedImageIndices = restoredImageSelection?.filter { it in ui.imageUrls.indices }?.toSet()
+                                    ?: ui.selectedImageIndices,
+                                selectedPresetId = restoredPreset?.takeIf { id -> ui.presets.any { it.id == id } }
+                                    ?: ui.selectedPresetId,
+                                audioOnly = restoredAudioOnly && ui.hasAudio,
+                                selectedGalleryOutputMode = GalleryOutputModeUi.entries.firstOrNull {
+                                    it.name == restoredGalleryMode && ui.galleryOutputOptions.any { opt -> opt.mode == it && opt.available }
+                                } ?: ui.selectedGalleryOutputMode,
+                            )
+                        },
                     )
                 }
+                restoringPreview = false
             } catch (canceled: CancellationException) {
                 throw canceled
             } catch (error: Throwable) {
+                if (parseGeneration != generation) return@launch
                 val failure = FailureClassifier.classify(error, FailureOperation.PARSE)
                 Log.w(LOG_TAG, "Parse failed [${failure.kind}]: ${failure.diagnostic}")
                 showParseError(failure.userMessage)
+                restoringPreview = false
             } finally {
                 repository.cancelProcess(parseProcessId)
                 if (parseGeneration == generation) {
@@ -223,22 +310,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     override fun onAudioOnlyChanged(enabled: Boolean) {
         _uiState.update { state ->
             val preview = state.activePreview ?: return@update state
+            if (enabled && !preview.hasAudio) return@update state
             state.copy(activePreview = preview.copy(audioOnly = enabled, canDownload = true))
         }
     }
 
     override fun onContentSelectionRequested() {
-        emitMessage("视频按当前单条作品下载；图文会按原顺序处理全部图片。")
+        if (_uiState.value.activePreview?.mediaKind == MediaKindUi.Gallery) {
+            _uiState.update { it.copy(overlay = FlowFrameOverlay.Gallery) }
+        }
     }
 
     override fun onFormatDetailsRequested() {
-        emitMessage("推荐、最高画质、节省空间和仅音频均由解析器按实际可用流自动匹配。")
+        _uiState.update { it.copy(overlay = FlowFrameOverlay.FormatDetails) }
     }
+
+    override fun onImageSelectionChanged(index: Int, selected: Boolean) {
+        _uiState.update { state ->
+            val preview = state.activePreview ?: return@update state
+            if (index !in preview.imageUrls.indices) return@update state
+            val indices = if (selected) preview.selectedImageIndices + index else preview.selectedImageIndices - index
+            state.copy(activePreview = preview.copy(selectedImageIndices = indices, selectedContentCount = indices.size))
+        }
+    }
+
+    override fun onSelectAllImages(selected: Boolean) {
+        _uiState.update { state ->
+            val preview = state.activePreview ?: return@update state
+            val indices = if (selected) preview.imageUrls.indices.toSet() else emptySet()
+            state.copy(activePreview = preview.copy(selectedImageIndices = indices, selectedContentCount = indices.size))
+        }
+    }
+
+    override fun onOverlayDismissed() { _uiState.update { it.copy(overlay = null) } }
+    override fun onCopyDiagnosticsRequested() { _events.tryEmit(UiEvent.CopyText(_uiState.value.diagnosticsText)) }
+    override fun onOpenRepositoryRequested() {
+        _events.tryEmit(UiEvent.OpenUrl("https://github.com/mdmm90340-sketch/FlowFrame"))
+    }
+    override fun onResetOutputDirectoryRequested() { settingsStore.setOutputDirectory(null, null) }
 
     override fun onDownloadRequested() {
         if (downloadJob?.isActive == true) return
         val preview = activePreview ?: return
         val previewUi = _uiState.value.activePreview ?: return
+        if (!previewUi.canDownload || !previewUi.selectedOutputAvailable) return
+        if (!directoryAvailable(settingsStore.state.value.outputDirectoryUri)) {
+            emitMessage("保存目录授权已失效，请重新选择目录")
+            onOutputDirectoryRequested()
+            return
+        }
         val preset = if (preview.mediaKind == MediaKind.GALLERY) {
             QualityPreset.RECOMMENDED
         } else if (previewUi.audioOnly) {
@@ -255,7 +375,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
             state.copy(activePreview = state.activePreview?.copy(canDownload = false))
         }
         downloadJob = viewModelScope.launch {
-            runCatching { repository.enqueue(preview, preset, galleryMode) }
+            runCatching { repository.enqueue(preview, preset, galleryMode,
+                selectedImageIndices = if (preview.mediaKind == MediaKind.GALLERY) previewUi.selectedImageIndices.sorted() else null,
+            ) }
                 .onSuccess {
                     activePreview = null
                     _uiState.update { state ->
@@ -282,9 +404,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     override fun onTaskAction(taskId: String, action: TaskAction) {
         val task = repository.tasks.value.firstOrNull { it.id == taskId }
         when (action) {
-            TaskAction.Cancel -> viewModelScope.launch { repository.cancel(taskId) }
-            TaskAction.Retry -> viewModelScope.launch { repository.retry(taskId) }
-            TaskAction.Delete -> viewModelScope.launch { repository.remove(taskId) }
+            TaskAction.Cancel -> performTaskAction { repository.cancel(taskId) }
+            TaskAction.Retry -> performTaskAction { repository.retry(taskId) }
+            TaskAction.Delete -> performTaskAction { repository.remove(taskId) }
             TaskAction.Open -> task?.resolvedOutputLocations?.firstOrNull()
                 ?.let { _events.tryEmit(UiEvent.OpenMedia(it)) }
                 ?: emitMessage("输出文件尚不可用")
@@ -293,6 +415,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
                 ?: emitMessage("输出文件尚不可用")
             TaskAction.Pause,
             TaskAction.Resume -> emitMessage("当前解析引擎暂不支持安全暂停，可取消后重新下载。")
+        }
+    }
+
+    private fun performTaskAction(action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { action() } catch (canceled: CancellationException) { throw canceled }
+            catch (error: Exception) { emitMessage("任务操作失败，请重试或查看诊断") }
         }
     }
 
@@ -314,7 +443,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     }
 
     override fun onOutputDirectoryRequested() {
-        emitMessage("视频保存到“影片/FlowFrame”，音频保存到“音乐/FlowFrame”，图片保存到“图片/FlowFrame”。")
+        _events.tryEmit(UiEvent.ChooseOutputDirectory(settingsStore.state.value.outputDirectoryUri))
     }
 
     override fun onWifiOnlyChanged(enabled: Boolean) {
@@ -334,20 +463,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     }
 
     override fun onDynamicColorChanged(enabled: Boolean) {
-        settingsStore.setDynamicColor(enabled)
+        if (Build.VERSION.SDK_INT >= 31) settingsStore.setDynamicColor(enabled)
     }
 
     override fun onDiagnosticsRequested() {
         val active = repository.tasks.value.count { it.stage in ACTIVE_STAGES }
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank { "未知" }
-        emitMessage("解析内核：${BundledYtDlpInstaller.KERNEL_VERSION} · 活跃任务：$active · ABI：$abi")
+        val network = container.networkMonitor.state.value
+        val diagnostic = buildString {
+            appendLine("视频与图集下载 · 流影 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT} · $abi")
+            appendLine("解析内核：${BundledYtDlpInstaller.KERNEL_VERSION}")
+            appendLine("网络：${if (!network.connected) "离线" else if (network.wifi) "Wi-Fi" else "其他网络"}")
+            appendLine("仅 Wi-Fi：${settingsStore.state.value.wifiOnly} · 并发：${settingsStore.state.value.maxConcurrentDownloads}")
+            appendLine("任务：${repository.tasks.value.size} · 进行中：$active")
+            appendLine("保存目录：${if (settingsStore.state.value.outputDirectoryUri == null) "系统默认" else "用户选择"}")
+            appendLine("目录授权：${if (directoryAvailable(settingsStore.state.value.outputDirectoryUri)) "有效" else "需重新授权"}")
+            container.taskStore.loadWarning?.let { appendLine(it) }
+            append("诊断不包含分享链接、作者、作品标题或账号信息。")
+        }
+        _uiState.update { it.copy(overlay = FlowFrameOverlay.Diagnostics, diagnosticsText = diagnostic) }
     }
 
     override fun onAboutRequested() {
-        emitMessage("流影 ${BuildConfig.VERSION_NAME} · GPL-3.0 开源软件 · 仅用于保存你有权下载的公开内容。")
+        _uiState.update { it.copy(overlay = FlowFrameOverlay.About) }
     }
 
     private fun cancelActiveParse() {
+        restoringPreview = false
         parseGeneration += 1
         parseJob?.cancel()
         parseJob = null
@@ -437,7 +580,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     private fun MediaPreview.toPreviewUi(): MediaPreviewUi {
         val gallery = mediaKind == MediaKind.GALLERY
         return MediaPreviewUi(
-            id = mediaId,
+            id = stableKey,
             title = title,
             author = uploader ?: "未知作者",
             platform = platform.toUi(),
@@ -448,46 +591,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
             mediaKind = mediaKind.toUi(),
             imageCount = imageCount,
             hasAudio = hasAudio,
+            thumbnailUrl = thumbnailUrl,
+            imageUrls = imageUrls,
+            selectedImageIndices = imageUrls.indices.toSet(),
+            formatDetails = if (gallery) "图片按所选顺序保存。合成视频使用 H.264 / AAC、1080×1920；无配乐时生成静音视频。" else
+                formats.joinToString("\n\n") { f ->
+                    listOf(f.ext.uppercase(), "${f.width}×${f.height}", f.videoCodec ?: "无视频",
+                        f.audioCodec ?: "无音频", f.filesizeBytes.takeIf { it > 0 }?.formatBytes().orEmpty())
+                        .filter(String::isNotBlank).joinToString(" · ")
+                }.ifBlank { "来源未提供完整编码信息；下载前将重新匹配实际可用媒体流。" },
             selectedGalleryOutputMode = GalleryOutputModeUi.Mp4,
             description = if (gallery) {
-                "可保存全部图片、原始配乐，或合成为 1080×1920 MP4。"
+                "选择需要的图片，保存原图或合成 MP4。"
             } else {
                 "下载前请确认你拥有保存和使用此内容的权利。"
             },
             contentCount = if (gallery) imageCount.coerceAtLeast(1) else 1,
             selectedContentCount = if (gallery) imageCount.coerceAtLeast(1) else 1,
-            presets = if (gallery) emptyList() else videoPresets(),
+            presets = if (gallery) emptyList() else videoPresets(this),
             selectedPresetId = if (gallery) null else PRESET_RECOMMENDED,
             estimatedSizeLabel = estimatedSizeBytes.takeIf { it > 0 }?.formatBytes(),
-            destinationLabel = if (gallery) "按所选方式保存到系统媒体库" else "影片 / FlowFrame",
+            destinationLabel = settingsStore.state.value.outputDirectoryName ?: defaultDirectoryLabel(),
             canDownload = if (gallery) imageCount > 0 else true,
         )
     }
 
-    private fun videoPresets() = listOf(
-        FormatPresetUi(
+    private fun videoPresets(preview: MediaPreview): List<FormatPresetUi> {
+        val resolutions = preview.formats.filter { it.videoCodec != "none" && it.width > 0 && it.height > 0 }
+            .map { minOf(it.width, it.height) }.distinct().sorted()
+        if (resolutions.size <= 1) return listOf(FormatPresetUi(
             id = PRESET_RECOMMENDED,
-            title = "推荐",
-            subtitle = "最高 1080P，优先兼容格式",
-            detail = "MP4 · H.264 / AAC 优先",
-            badge = "推荐",
-        ),
-        FormatPresetUi(
-            id = PRESET_BEST,
-            title = "最高画质",
-            subtitle = "选择当前公开视频可用的最高质量",
-            detail = "必要时自动合并音视频",
-        ),
-        FormatPresetUi(
-            id = PRESET_DATA_SAVER,
-            title = "节省空间",
-            subtitle = "最高 720P，兼顾清晰与体积",
-            detail = "适合移动网络与快速分享",
-        ),
-    )
+            title = "保存视频",
+            subtitle = resolutions.singleOrNull()?.let { "当前可用 ${it}P" } ?: "使用来源提供的视频质量",
+            detail = "保留可用视频，必要时合并音轨",
+        ))
+        val recommended = resolutions.lastOrNull { it <= 1080 } ?: resolutions.first()
+        val compact = resolutions.lastOrNull { it <= 720 } ?: resolutions.first()
+        return listOf(
+            FormatPresetUi(PRESET_RECOMMENDED, "推荐", "优先 ${recommended}P", "优先常见 MP4 编码", badge = "推荐"),
+            FormatPresetUi(PRESET_BEST, "最高画质", "当前最高 ${resolutions.last()}P", "必要时合并音视频"),
+            FormatPresetUi(PRESET_DATA_SAVER, "节省空间", "优先 ${compact}P", "降低体积，便于保存与分享"),
+        )
+    }
 
     private fun MediaPreview.toRecentUi() = RecentMediaUi(
-        id = mediaId,
+        id = stableKey,
+        thumbnailUrl = thumbnailUrl,
         title = title,
         author = uploader ?: "未知作者",
         platform = platform.toUi(),
@@ -508,8 +657,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
             TaskStage.DOWNLOADING -> DownloadTaskStage.Downloading
             TaskStage.MERGING -> DownloadTaskStage.Merging
             TaskStage.COMPLETED -> DownloadTaskStage.Completed
-            TaskStage.FAILED,
-            TaskStage.CANCELED -> DownloadTaskStage.Failed
+            TaskStage.FAILED -> DownloadTaskStage.Failed
+            TaskStage.CANCELED -> DownloadTaskStage.Canceled
         },
         formatLabel = when (preset) {
             QualityPreset.RECOMMENDED -> "推荐"
@@ -520,12 +669,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
         mediaKind = mediaKind.toUi(),
         galleryOutputMode = galleryOutputMode?.toUi(),
         outputLocations = resolvedOutputLocations,
-        progress = progress,
-        downloadedBytes = outputSizeBytes,
-        totalBytes = outputSizeBytes.takeIf { it > 0L },
+        progress = if (stage == TaskStage.QUEUED || stage == TaskStage.RESOLVING) null else progress,
+        downloadedBytes = if (stage == TaskStage.COMPLETED) outputSizeBytes else downloadedBytes,
+        totalBytes = if (stage == TaskStage.COMPLETED) outputSizeBytes.takeIf { it > 0 } else totalBytes,
+        bytesPerSecond = bytesPerSecond,
+        thumbnailUrl = previews["${platform.name}:$mediaId"]?.thumbnailUrl,
         etaSeconds = etaSeconds,
         errorMessage = when {
             stage == TaskStage.CANCELED -> "任务已取消"
+            stage == TaskStage.QUEUED && !container.networkMonitor.state.value.connected -> "等待网络恢复"
+            stage == TaskStage.QUEUED && settingsStore.state.value.wifiOnly && !container.networkMonitor.state.value.wifi -> "等待 Wi-Fi 网络"
             else -> errorMessage
         },
     )
@@ -533,11 +686,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
     private fun Platform.toUi() = when (this) {
         Platform.DOUYIN -> MediaPlatform.Douyin
         Platform.BILIBILI -> MediaPlatform.Bilibili
+        Platform.XIAOHONGSHU -> MediaPlatform.Xiaohongshu
+        Platform.WEIBO -> MediaPlatform.Weibo
+        Platform.KUAISHOU -> MediaPlatform.Kuaishou
     }
 
     private fun Platform.inputLabel() = when (this) {
         Platform.DOUYIN -> "抖音"
         Platform.BILIBILI -> "B站"
+        Platform.XIAOHONGSHU -> "小红书"
+        Platform.WEIBO -> "微博"
+        Platform.KUAISHOU -> "快手"
     }
 
     private fun MediaKind.toUi() = when (this) {
@@ -607,6 +766,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), F
         data class Message(val text: String) : UiEvent
         data class OpenMedia(val location: String) : UiEvent
         data class ShareMedia(val locations: List<String>) : UiEvent
+        data class ChooseOutputDirectory(val currentUri: String?) : UiEvent
+        data class CopyText(val text: String) : UiEvent
+        data class OpenUrl(val url: String) : UiEvent
     }
 
     private companion object {
