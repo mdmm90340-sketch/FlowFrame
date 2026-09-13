@@ -1,4 +1,4 @@
-FlowFrame / 流影下载 1.2.1
+FlowFrame / 媒体下载 1.2.2
 
 Copyright (C) 2026 FlowFrame contributors
 

@@ -1,5 +1,6 @@
 package com.flowframe.app.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -30,6 +30,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -38,10 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flowframe.app.ui.model.MediaPlatform
+import com.flowframe.app.R
 import com.flowframe.app.ui.theme.BilibiliAccent
 import com.flowframe.app.ui.theme.DouyinAccent
-import com.flowframe.app.ui.theme.FlowGradientEnd
-import com.flowframe.app.ui.theme.FlowGradientStart
 
 @Composable
 fun FlowFrameBrandHeader(
@@ -56,7 +57,7 @@ fun FlowFrameBrandHeader(
         FlowFrameLogo(Modifier.size(32.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "流影",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -71,24 +72,11 @@ fun FlowFrameBrandHeader(
 
 @Composable
 fun FlowFrameLogo(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(48.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(FlowGradientStart, FlowGradientEnd),
-                ),
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Rounded.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(29.dp),
-            tint = Color.White,
-        )
-    }
+    Image(
+        painter = painterResource(R.drawable.ic_brand),
+        contentDescription = null,
+        modifier = modifier.size(48.dp),
+    )
 }
 
 @Composable

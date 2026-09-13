@@ -2,6 +2,14 @@
 
 这份文档用于在新电脑或下次继续开发时快速恢复 FlowFrame 的本地环境。
 
+## 名称与图标
+
+用户可见名称以 `app/src/main/res/values/strings.xml` 的 `app_name` 为准；包名、类名和既有 `FlowFrame` 媒体目录不随品牌名称改变。
+
+图标使用 Android 原生矢量资源。编辑 `tools/generate_brand_icons.py` 后执行 `python tools/generate_brand_icons.py`，同步生成自适应前景、单色主题图标、旧系统圆角方形图标和通知小图标。应用内标识与旧系统图标共用 `ic_brand`，通知单独使用透明单色的 `ic_notification_download`。
+
+自适应前景按 [Android 图标规范](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive) 保留在 108dp 画布的中央安全区域。背景不预先裁圆角，由启动器应用统一形状；旧系统资源自行绘制圆角方形。修改后至少检查圆角方形、圆形、单色和小尺寸表现。
+
 ## 环境
 
 - JDK 17

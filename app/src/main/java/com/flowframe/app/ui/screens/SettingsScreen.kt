@@ -42,11 +42,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.heading
+import com.flowframe.app.R
 import com.flowframe.app.ui.components.FlowFrameBrandHeader
 import com.flowframe.app.ui.components.StatePanel
 import com.flowframe.app.ui.model.SettingsUiState
@@ -203,7 +205,7 @@ fun SettingsScreen(
                 SectionDivider()
                 SettingRow(
                     icon = Icons.Rounded.Info,
-                    title = "关于流影",
+                    title = stringResource(R.string.about_app, stringResource(R.string.app_name)),
                     subtitle = "${state.versionLabel} · 开源许可与隐私说明",
                     onClick = onAboutRequested,
                 )

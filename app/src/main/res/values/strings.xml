@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">流影下载</string>
+    <string name="app_name">媒体下载</string>
+    <string name="about_app">关于%1$s</string>
+    <string name="diagnostic_clip_label">%1$s诊断</string>
     <string name="download_notification_channel">下载任务</string>
-    <string name="download_notification_channel_description">显示流影后台下载进度</string>
+    <string name="download_notification_channel_description">显示视频和图集的后台下载进度</string>
 </resources>
 

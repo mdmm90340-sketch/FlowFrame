@@ -155,7 +155,8 @@ class MainActivity : ComponentActivity() {
             is MainViewModel.UiEvent.ShareMedia -> shareMedia(event.locations)
             is MainViewModel.UiEvent.ChooseOutputDirectory -> directoryPicker.launch(event.currentUri?.let(Uri::parse))
             is MainViewModel.UiEvent.CopyText -> {
-                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("流影诊断", event.text))
+                val label = getString(R.string.diagnostic_clip_label, getString(R.string.app_name))
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(label, event.text))
                 Toast.makeText(this@MainActivity, "诊断信息已复制", Toast.LENGTH_SHORT).show()
             }
             is MainViewModel.UiEvent.OpenUrl -> runCatching {
@@ -202,7 +203,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }.apply {
-            clipData = ClipData.newUri(contentResolver, "FlowFrame media", items.first().uri).also { clip ->
+            clipData = ClipData.newUri(contentResolver, getString(R.string.app_name), items.first().uri).also { clip ->
                 items.drop(1).forEach { clip.addItem(ClipData.Item(it.uri)) }
             }
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

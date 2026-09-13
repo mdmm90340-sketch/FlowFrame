@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
+import com.flowframe.app.R
 import com.flowframe.app.ui.components.FlowFrameLogo
 import com.flowframe.app.ui.components.StatePanel
 import com.flowframe.app.ui.model.FlowFrameOverlay
@@ -221,10 +223,11 @@ fun InformationScreen(
     onCopyDiagnostics: () -> Unit,
     onOpenRepository: () -> Unit,
 ) {
+    val appName = stringResource(R.string.app_name)
     val title = when (overlay) {
         FlowFrameOverlay.FormatDetails -> "格式详情"
         FlowFrameOverlay.Diagnostics -> "诊断信息"
-        FlowFrameOverlay.About -> "关于流影"
+        FlowFrameOverlay.About -> stringResource(R.string.about_app, appName)
         FlowFrameOverlay.Gallery -> "图片浏览"
     }
     Scaffold(
@@ -284,18 +287,18 @@ fun InformationScreen(
                         ) {
                             FlowFrameLogo()
                             Column {
-                                Text("流影", style = MaterialTheme.typography.headlineSmall)
+                                Text(appName, style = MaterialTheme.typography.headlineSmall)
                                 Text("版本 " + uiState.settings.versionLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } }
                         item { InformationCard("视频与图集下载", "解析作品链接，选择保存质量与内容，并在后台完成下载。任务完成后可打开或分享文件。") }
                         item { InformationCard(
                             "隐私说明",
-                            "仅在你点击粘贴时读取剪贴板文字。解析与下载会访问作品所在平台及其媒体地址。任务记录、保存设置与输出文件保存在设备上。\n\n流影不要求账号登录，也不会读取其他应用的登录凭据。删除任务记录不会删除已经保存的文件。",
+                            "仅在你点击粘贴时读取剪贴板文字。解析与下载会访问作品所在平台及其媒体地址。任务记录、保存设置与输出文件保存在设备上。\n\n${appName}不要求账号登录，也不会读取其他应用的登录凭据。删除任务记录不会删除已经保存的文件。",
                         ) }
                         item { InformationCard(
                             "开源许可",
-                            "FlowFrame 按 GNU GPL v3 许可发布。完整源代码、许可文本和依赖说明可在项目仓库查看。\n\n请仅保存你有权下载和使用的内容。",
+                            "$appName 按 GNU GPL v3 许可发布。完整源代码、许可文本和依赖说明可在项目仓库查看。\n\n请仅保存你有权下载和使用的内容。",
                         ) }
                         item { OutlinedButton(onClick = onOpenRepository, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))

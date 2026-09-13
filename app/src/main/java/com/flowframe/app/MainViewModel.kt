@@ -479,8 +479,9 @@ class MainViewModel(application: Application, private val savedState: SavedState
         val active = repository.tasks.value.count { it.stage in ACTIVE_STAGES }
         val abi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty().ifBlank { "未知" }
         val network = container.networkMonitor.state.value
+        val appName = getApplication<Application>().getString(R.string.app_name)
         val diagnostic = buildString {
-            appendLine("视频与图集下载 · 流影 ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("$appName ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT} · $abi")
             appendLine("解析内核：${BundledYtDlpInstaller.KERNEL_VERSION}")
             appendLine("网络：${if (!network.connected) "离线" else if (network.wifi) "Wi-Fi" else "其他网络"}")
