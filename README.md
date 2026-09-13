@@ -2,7 +2,7 @@
 
 媒体下载（FlowFrame）是一款面向 Android 的开源公开视频保存工具。把抖音分享文案、抖音链接、`b23.tv` 短链或哔哩哔哩视频链接粘贴进应用，即可预览内容并选择保存方式。
 
-当前工作副本为 **1.2.2 图标与名称更新版**：桌面名称直接说明用途，图标以圆角方形为设计基础，并适配系统的图标裁切与单色主题。功能沿用 1.2.1，版本说明与本轮验证状态见 [1.2.2 更新说明](docs/releases/1.2.2.md)。手机 APK 提供 `arm64-v8a`，支持目标为 Android 7.0 及以上。此前的结构优化和平台验收分别见 [1.2.1 优化报告](docs/OPTIMIZATION-1.2.1.md) 与 [1.2.0 测试报告](docs/VERIFICATION-1.2.0.md)；其余原生组件仍有 RELRO 对齐缺口，尚不能承诺全面兼容 16 KiB 设备。
+当前已发布 **1.2.2 图标与名称更新版（测试版）**：桌面名称直接说明用途，图标以圆角方形为设计基础，并适配系统的图标裁切与单色主题。功能沿用 1.2.1，版本说明与本轮验证状态见 [1.2.2 更新说明](docs/releases/1.2.2.md)。手机 APK 提供 `arm64-v8a`，支持目标为 Android 7.0 及以上。此前的结构优化和平台验收分别见 [1.2.1 优化报告](docs/OPTIMIZATION-1.2.1.md) 与 [1.2.0 测试报告](docs/VERIFICATION-1.2.0.md)；其余原生组件仍有 RELRO 对齐缺口，尚不能承诺全面兼容 16 KiB 设备。
 
 [查看安装包](../../releases) · [查看更新记录](CHANGELOG.md) · [开发指南](docs/DEVELOPMENT.md) · [参与贡献](CONTRIBUTING.md)
 
@@ -29,7 +29,7 @@
 
 ## 使用
 
-1. 从 [Releases](../../releases) 下载名称以 `.apk` 结尾的文件；旁边的 `.idsig` 不需要手动安装。
+1. 手机请下载 [FlowFrame-1.2.2-arm64-release.apk](https://github.com/mdmm90340-sketch/FlowFrame/releases/download/v1.2.2/FlowFrame-1.2.2-arm64-release.apk)。[发布页](https://github.com/mdmm90340-sketch/FlowFrame/releases/tag/v1.2.2)中的 `x86_64-test` 包仅用于对应架构的虚拟机；源码与开发验证归档不需要安装。
 2. 在 Android 系统中允许本次来源安装应用，然后覆盖安装即可保留原任务记录。
 3. 粘贴链接或完整分享文案，确认自动提取的链接后点击“解析”。
 4. 选择画质或图文输出方式并加入下载。
