@@ -7,6 +7,9 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sh text eol=lf
+*.swift text eol=lf
+*.plist text eol=lf
+*.xcprivacy text eol=lf
 gradlew text eol=lf
 
 *.bat text eol=crlf

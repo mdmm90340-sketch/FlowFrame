@@ -34,3 +34,15 @@ keystore.properties
 # Operating-system files
 .DS_Store
 Thumbs.db
+
+# iOS generated projects, build outputs and signing material
+ios/FlowFrame.xcodeproj/
+**/.build/
+**/.swiftpm/
+*.ipa
+*.xcarchive/
+*.xcresult/
+*.mobileprovision
+*.p8
+*.cer
+*.pfx

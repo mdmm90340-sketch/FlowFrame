@@ -1,0 +1,109 @@
+name: iOS CI
+
+on:
+  push:
+    paths: ['ios/**', '.github/workflows/ios.yml', 'tools/generate_ios_brand_icon.py']
+  pull_request:
+    branches: [main]
+    paths: ['ios/**', '.github/workflows/ios.yml', 'tools/generate_ios_brand_icon.py']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 35
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select and record toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          mkdir -p dist/ios
+          { git rev-parse HEAD; xcodebuild -version; swift --version; } > dist/ios/build-environment.txt
+      - name: Install verified XcodeGen 2.44.1
+        run: |
+          curl --fail --location --retry 3 https://github.com/yonaskolb/XcodeGen/releases/download/2.44.1/xcodegen.zip -o "$RUNNER_TEMP/xcodegen.zip"
+          echo "a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen"
+          echo "$RUNNER_TEMP/xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
+      - name: Test URL policies and media parsers
+        run: swift test --package-path ios/FlowFrameCore
+      - name: Generate Xcode project
+        run: xcodegen generate --spec ios/project.yml
+      - name: Select iPhone simulator
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for runtime,devices in d.items() if "iOS-18-5" in runtime for x in devices if x["name"].startswith("iPhone")))')
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
+      - name: Build and test the iOS interface
+        run: |
+          set -o pipefail
+          xcodebuild test -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
+            -configuration Debug -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath build/ios-simulator -resultBundlePath dist/ios/UITests.xcresult \
+            CODE_SIGNING_ALLOWED=NO | tee dist/ios/simulator-build.log | xcbeautify
+      - name: Capture simulator home screen
+        run: |
+          xcrun simctl launch "$SIMULATOR_ID" com.flowframe.ios
+          sleep 2
+          xcrun simctl io "$SIMULATOR_ID" screenshot dist/ios/FlowFrame-iOS-home.png
+      - name: Build unsigned ARM64 app
+        run: |
+          set -o pipefail
+          xcodebuild build -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios-device CODE_SIGNING_ALLOWED=NO \
+            | tee dist/ios/device-build.log | xcbeautify
+      - name: Package unsigned IPA and provenance
+        run: |
+          set -euo pipefail
+          APP=build/ios-device/Build/Products/Release-iphoneos/FlowFrame.app
+          test "$(lipo -archs "$APP/FlowFrame")" = arm64
+          test ! -e "$APP/embedded.mobileprovision"
+          test ! -e "$APP/_CodeSignature"
+          mkdir -p build/ios-package/Payload
+          ditto "$APP" build/ios-package/Payload/FlowFrame.app
+          (cd build/ios-package && ditto -c -k --keepParent Payload ../../dist/ios/FlowFrame-iOS-0.1.0-unsigned.ipa)
+          unzip -tq dist/ios/FlowFrame-iOS-0.1.0-unsigned.ipa
+          cp ios/README.md dist/ios/FlowFrame-iOS-README.md
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path('dist/ios')
+          (root / 'build-provenance.json').write_text(json.dumps({
+              'source_commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
+              'workflow_run': os.environ['GITHUB_RUN_ID'], 'version': '0.1.0',
+              'bundle_id': 'com.flowframe.ios', 'architecture': 'arm64', 'minimum_ios': '16.0',
+              'signed': False, 'unit_tests': 'passed', 'simulator_ui_tests': 'passed',
+              'real_iphone_installation': 'not_tested', 'live_platform_download': 'not_verified'
+          }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          (cd dist/ios && shasum -a 256 FlowFrame-iOS-0.1.0-unsigned.ipa FlowFrame-iOS-README.md build-provenance.json FlowFrame-iOS-home.png > SHA256SUMS.txt)
+      - name: Upload distributable files
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowFrame-iOS-0.1.0-unsigned
+          path: |
+            dist/ios/*.ipa
+            dist/ios/*.md
+            dist/ios/*.json
+            dist/ios/*.png
+            dist/ios/SHA256SUMS.txt
+            dist/ios/build-environment.txt
+          if-no-files-found: error
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowFrame-iOS-test-evidence
+          path: |
+            dist/ios/UITests.xcresult
+            dist/ios/*.log
+          if-no-files-found: ignore
