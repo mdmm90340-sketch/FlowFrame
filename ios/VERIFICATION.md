@@ -2,19 +2,23 @@
 
 本文件区分源码测试、模拟器、设备编译和真实使用，不将 Android 的历史验收结果移用于 iOS。
 
-当前处于首次构建验证阶段。最终结果随通过的 GitHub Actions run、`build-provenance.json`、测试结果和 Release 一起交付。
+验证日期：2026-09-30（Asia/Shanghai）。[GitHub Actions 36602064092](https://github.com/mdmm90340-sketch/FlowFrame/actions/runs/36602064092) 完整通过。二进制构建提交为 `14416d631dcd38d4440980fb2d436904e6cb2e7a`，工具链为 Xcode 16.4 / Swift 6.1.2。构建后仅补充验证与发布文档，差异文件记录在 Release 的 `release-provenance.json` 中。
 
 | 范围 | 状态 |
 | --- | --- |
-| Swift 解析器与链接单元测试 | 待 macOS CI 执行 |
-| iPhone 模拟器 UI 测试 | 待 macOS CI 执行 |
-| ARM64 iPhoneOS Release 编译 | 待 macOS CI 执行 |
-| IPA 完整性与公开下载哈希 | 待发布核验 |
+| Swift 解析器与链接单元测试 | 14 项通过，0 失败 |
+| 模拟器媒体处理测试 | 4 项通过；合成 H.264/AAC 实际合并、取消、伪媒体与无效轨道拒绝 |
+| iPhone 模拟器 UI 测试 | iPhone 16 Pro / iOS 18.5，4 项通过；首页输入、错误提示、页面导航及截图 |
+| ARM64 iPhoneOS Release 编译 | 通过，未签名；本地再核对 Mach-O 架构、包标识、版本和最低系统版本 |
+| IPA ZIP 完整性与 SHA-256 | CI 及 Windows 独立校验通过；公开下载核验记录随 Release 的 `release-verification.json` 提供 |
 | 真实 iPhone 签名安装 | 未验证：未提供 Apple 签名 |
 | 真实平台在线解析与下载 | 未验证 |
+| iPad 与最低 iOS 16 实测 | 未验证；部署目标不等于已在全部设备上验收 |
 | 后台持续下载 | 首版不承诺，需保持前台 |
 
-解析器测试数据为合成夹具，不含真实用户数据或登录凭据。
+IPA 为 395,802 字节，SHA-256：`5e81d5851864f2d9834b356dae593a40d6d670acde12c7a9ca5a913f67c0fa52`。Release 附带 CI 原始校验清单、构建来源、三张模拟器截图、完整测试结果及日志。解析器和媒体测试使用合成夹具，不含真实用户数据或登录凭据。
+
+同一构建提交的前一次运行 `36600674124` 曾在 XCTest 获取应用后台断言时失败；同轮执行相同导航辅助函数的截图测试通过，随后同一提交、相同断言的完整重跑通过。本记录不把该系统错误归因于已证实的根因，也没有通过跳过测试或降低断言取得通过结果。截图从成功测试的 `.xcresult` 附件直接导出。
 
 ## 公开平台接口探测（Windows 主机，不是 iOS 端到端验收）
 

@@ -8,6 +8,18 @@ FlowFrame 首个独立的原生 iOS 客户端，最低 iOS 16。使用 SwiftUI�
 
 构建方式见 [iOS README](https://github.com/mdmm90340-sketch/FlowFrame/blob/main/ios/README.md)，完整验证边界见 [验证记录](https://github.com/mdmm90340-sketch/FlowFrame/blob/main/ios/VERIFICATION.md)。Release 附带 SHA-256、构建来源、模拟器首页截图、测试证据归档和验证记录。二进制不放入 Git 源码历史。
 
+## 本次验证
+
+[完整构建与测试已通过](https://github.com/mdmm90340-sketch/FlowFrame/actions/runs/36602064092)：14 项解析与链接测试、4 项模拟器媒体处理测试、4 项 UI 测试，以及 ARM64 iPhoneOS Release 编译。三张截图来自成功的 UI 测试。本地已再次核对 IPA ZIP 完整性、ARM64 架构、版本和未签名状态。
+
+二进制源码提交：`14416d631dcd38d4440980fb2d436904e6cb2e7a`。版本标签在此之后仅增加验证与发布文档，具体文件见 `release-provenance.json`。IPA 大小为 395,802 字节，SHA-256：
+
+```text
+5e81d5851864f2d9834b356dae593a40d6d670acde12c7a9ca5a913f67c0fa52
+```
+
+`SHA256SUMS.txt` 为 CI 原始产物校验清单，`RELEASE-SHA256SUMS.txt` 覆盖额外发布附件；公开重新下载及源码克隆的核验结果见 `release-verification.json`。
+
 ## 功能与限制
 
 - B 站原生解析路径处理匿名响应中的 AVC/AAC DASH 或单文件 MP4；分离音视频使用 AVFoundation 合并。
