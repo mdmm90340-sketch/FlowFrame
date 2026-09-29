@@ -7,9 +7,7 @@ enum MediaExporter {
     static func validate(_ file: URL, kind: MediaKind) async throws {
         switch kind {
         case .image:
-            guard UIImage(contentsOfFile: file.path) != nil else {
-                throw DownloadFailure.message("图片格式暂不受 iOS 支持，文件未保存。")
-            }
+            _ = try ImageFile.thumbnail(at: file, maximumPixelSize: 512)
         case .audio, .video:
             let asset = AVURLAsset(url: file)
             let tracks = try await asset.loadTracks(withMediaType: kind == .video ? .video : .audio)
@@ -59,6 +57,9 @@ enum MediaExporter {
                         continuation.resume(throwing: DownloadFailure.message("iOS 无法合并此媒体编码，请选择其他画质。"))
                     }
                 }
+                // Cancellation before exportAsynchronously may have been ignored by AVFoundation.
+                // Re-check after starting; later cancellation is handled by onCancel.
+                if Task.isCancelled { exporter.cancelExport() }
             }
         } onCancel: {
             exporter.cancelExport()

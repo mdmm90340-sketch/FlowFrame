@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreVideo
+import Foundation
 import XCTest
 @testable import FlowFrame
 

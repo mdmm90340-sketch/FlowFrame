@@ -132,6 +132,7 @@ struct HomeView: View {
             parsingTask = nil
             parsing = false
         }
+        .onChange(of: input) { _ in preview = nil }
     }
 
     private func parse() {

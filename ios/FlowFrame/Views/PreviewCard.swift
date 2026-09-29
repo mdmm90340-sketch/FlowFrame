@@ -150,7 +150,7 @@ struct SecureThumbnail: View {
                 let transfer = MediaTransfer(destination: local, kind: .image, sizeLimit: 16 * 1024 * 1024)
                 _ = try await transfer.fetch(url, headers: headers)
                 try Task.checkCancellation()
-                image = UIImage(contentsOfFile: local.path)
+                image = try ImageFile.thumbnail(at: local, maximumPixelSize: 480)
             } catch { /* A missing thumbnail never prevents selecting or downloading. */ }
         }
     }

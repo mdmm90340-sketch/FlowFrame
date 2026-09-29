@@ -73,19 +73,26 @@ final class FlowFrameUITests: XCTestCase {
 
     @MainActor
     private func openDownloads(in app: XCUIApplication) {
-        let tab = app.buttons["tasksTab"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        tab.tap()
+        tapTab(in: app, identifier: "tasksTab", title: "下载")
         XCTAssertTrue(app.navigationBars["下载"].waitForExistence(timeout: 5))
     }
 
     @MainActor
     private func openAbout(in app: XCUIApplication) {
-        let tab = app.buttons["aboutTab"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        tab.tap()
+        tapTab(in: app, identifier: "aboutTab", title: "关于")
         XCTAssertTrue(app.navigationBars["关于 FlowFrame"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["iOS 实验版"].exists)
+    }
+
+    @MainActor
+    private func tapTab(in app: XCUIApplication, identifier: String, title: String) {
+        // SwiftUI can expose the NavigationStack identifier on its content instead
+        // of its native tab item. Both queries stay scoped to actual tab buttons.
+        let tab = app.tabBars.buttons.matching(NSPredicate(
+            format: "identifier == %@ OR label == %@", identifier, title
+        )).firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 5))
+        tab.tap()
     }
 
     @MainActor

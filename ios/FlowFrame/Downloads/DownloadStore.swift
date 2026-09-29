@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import FlowFrameCore
 import UIKit
 
@@ -12,6 +13,10 @@ final class DownloadStore: ObservableObject {
     private let recordsURL: URL
     private var worker: Task<Void, Never>?
     private var activeID: UUID?
+    private var retryAfterCleanup: Set<UUID> = []
+    private var canSaveRecords = true
+    private var recoveryNotice: String?
+    private var progressID: UUID?
     private var foreground = true
     private var backgroundID: UIBackgroundTaskIdentifier = .invalid
 
@@ -29,7 +34,21 @@ final class DownloadStore: ObservableObject {
             if files.fileExists(atPath: staging.path) { try files.removeItem(at: staging) }
             try files.createDirectory(at: staging, withIntermediateDirectories: true)
             if files.fileExists(atPath: recordsURL.path) {
-                records = try JSONDecoder().decode([DownloadRecord].self, from: Data(contentsOf: recordsURL))
+                do {
+                    records = try JSONDecoder().decode([DownloadRecord].self, from: Data(contentsOf: recordsURL))
+                } catch {
+                    // Preserve unreadable history before allowing a fresh task database.
+                    let backup = supportDirectory.appendingPathComponent("tasks-unreadable-\(UUID().uuidString).json")
+                    do {
+                        try files.moveItem(at: recordsURL, to: backup)
+                        recoveryNotice = "旧下载记录无法读取，已保留备份。已下载文件仍在 Downloads 文件夹中。"
+                        storageWarning = recoveryNotice
+                    } catch {
+                        canSaveRecords = false
+                        storageWarning = "下载记录无法读取且暂时无法备份，已暂停新增任务以保护原记录。请检查设备可用空间。"
+                    }
+                    return
+                }
                 for index in records.indices {
                     if records[index].status.isPending {
                         records[index].status = .failed
@@ -46,6 +65,7 @@ final class DownloadStore: ObservableObject {
                 persist()
             }
         } catch {
+            canSaveRecords = false
             storageWarning = "下载记录无法读取或保存。已保存的媒体仍可在“文件”App 中找到。"
         }
     }
@@ -53,6 +73,7 @@ final class DownloadStore: ObservableObject {
     var pendingCount: Int { records.filter { $0.status.isPending }.count }
 
     func enqueue(preview: MediaPreview, assets: [MediaAsset], sourceText: String) {
+        guard canSaveRecords else { return }
         for asset in assets {
             records.insert(DownloadRecord(preview: preview, asset: asset, sourceText: sourceText), at: 0)
         }
@@ -63,6 +84,12 @@ final class DownloadStore: ObservableObject {
     func retry(_ id: UUID) {
         guard let index = records.firstIndex(where: { $0.id == id }),
               [.failed, .cancelled].contains(records[index].status) else { return }
+        if activeID == id {
+            retryAfterCleanup.insert(id)
+            records[index].detail = "正在清理临时文件，随后重新下载。"
+            persist()
+            return
+        }
         records[index].status = .queued
         records[index].detail = nil
         records[index].progress = nil
@@ -71,6 +98,7 @@ final class DownloadStore: ObservableObject {
     }
 
     func cancel(_ id: UUID) {
+        retryAfterCleanup.remove(id)
         guard let index = records.firstIndex(where: { $0.id == id }), records[index].status.isPending else { return }
         records[index].status = .cancelled
         records[index].progress = nil
@@ -129,7 +157,11 @@ final class DownloadStore: ObservableObject {
             await self.perform(record)
             self.worker = nil
             self.activeID = nil
+            self.progressID = nil
             self.endBackgroundTime()
+            if self.retryAfterCleanup.remove(record.id) != nil {
+                self.retry(record.id)
+            }
             self.startNext()
         }
     }
@@ -139,6 +171,7 @@ final class DownloadStore: ObservableObject {
             .appendingPathComponent(record.id.uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: staging) }
         do {
+            try Task.checkCancellation()
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
             update(record.id, status: .resolving)
             let preview = try await resolver.resolve(record.sourceText)
@@ -149,16 +182,21 @@ final class DownloadStore: ObservableObject {
             update(record.id, status: .downloading, detail: asset.companionAudioURL == nil ? "正在下载文件" : "正在下载视频轨道（1/2）")
             let ext = Self.safeExtension(asset.fileExtension, kind: asset.kind)
             let primary = staging.appendingPathComponent("media.\(ext)")
-            let transfer = MediaTransfer(destination: primary, kind: asset.kind) { [weak self] progress in
-                Task { @MainActor in self?.setProgress(record.id, progress: progress) }
+            let primaryProgressID = UUID()
+            progressID = primaryProgressID
+            let transfer = MediaTransfer(destination: primary, kind: asset.kind,
+                                         sizeLimit: asset.kind == .image ? 32 * 1024 * 1024 : 2_147_483_648) { [weak self] progress in
+                Task { @MainActor in self?.setProgress(record.id, phase: primaryProgressID, progress: progress) }
             }
             var result = try await transfer.fetch(asset.url, headers: asset.headers)
             try Task.checkCancellation()
             if let audioURL = asset.companionAudioURL {
                 update(record.id, status: .downloading, detail: "正在下载音频轨道（2/2）")
                 let audio = staging.appendingPathComponent("audio.m4a")
+                let audioProgressID = UUID()
+                progressID = audioProgressID
                 let audioTransfer = MediaTransfer(destination: audio, kind: .audio) { [weak self] progress in
-                    Task { @MainActor in self?.setProgress(record.id, progress: progress) }
+                    Task { @MainActor in self?.setProgress(record.id, phase: audioProgressID, progress: progress) }
                 }
                 _ = try await audioTransfer.fetch(audioURL, headers: asset.headers)
                 try Task.checkCancellation()
@@ -171,7 +209,9 @@ final class DownloadStore: ObservableObject {
             guard records.contains(where: { $0.id == record.id && $0.status.isPending }) else { throw CancellationError() }
             let title = String(record.title.filter { !"/\\:*?\"<>|".contains($0) && !$0.isNewline }.prefix(48))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalExtension = asset.companionAudioURL == nil ? ext : "mp4"
+            let finalExtension: String
+            if asset.kind == .image { finalExtension = try ImageFile.fileExtension(at: result) }
+            else { finalExtension = asset.companionAudioURL == nil ? ext : "mp4" }
             let name = "\(title.isEmpty ? "FlowFrame" : title)-\(record.id.uuidString.prefix(8)).\(finalExtension)"
             try FileManager.default.moveItem(at: result, to: downloadsDirectory.appendingPathComponent(name))
             if let index = records.firstIndex(where: { $0.id == record.id }) {
@@ -202,14 +242,14 @@ final class DownloadStore: ObservableObject {
         }
     }
 
-    private func setProgress(_ id: UUID, progress: Double?) {
-        guard let index = records.firstIndex(where: { $0.id == id }), records[index].status == .downloading else { return }
+    private func setProgress(_ id: UUID, phase: UUID, progress: Double?) {
+        guard progressID == phase, let index = records.firstIndex(where: { $0.id == id }), records[index].status == .downloading else { return }
         if let progress, let previous = records[index].progress, abs(progress - previous) < 0.01 { return }
         records[index].progress = progress
     }
 
     private func update(_ id: UUID, status: DownloadStatus, detail: String? = nil) {
-        guard let index = records.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = records.firstIndex(where: { $0.id == id }), records[index].status.isPending else { return }
         records[index].status = status
         records[index].detail = detail
         records[index].progress = nil
@@ -217,10 +257,11 @@ final class DownloadStore: ObservableObject {
     }
 
     private func persist() {
+        guard canSaveRecords else { return }
         do {
             let data = try JSONEncoder().encode(records)
             try data.write(to: recordsURL, options: .atomic)
-            storageWarning = nil
+            storageWarning = recoveryNotice
         } catch {
             storageWarning = "下载记录暂时无法保存，请检查设备可用空间。"
         }

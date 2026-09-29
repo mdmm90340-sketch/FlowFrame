@@ -103,7 +103,7 @@ final class MediaTransfer: NSObject, URLSessionDownloadDelegate, @unchecked Send
         guard totalBytesWritten <= sizeLimit,
               totalBytesExpectedToWrite <= sizeLimit else {
             downloadTask.cancel()
-            finish(.failure(DownloadFailure.message("文件超过当前版本的大小限制（2 GB）。")))
+            finish(.failure(DownloadFailure.message(kind == .image ? "图片超过当前版本的大小限制（32 MB）。" : "文件超过当前版本的大小限制（2 GB）。")))
             return
         }
         progress(totalBytesExpectedToWrite > 0 ? min(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite), 1) : nil)
