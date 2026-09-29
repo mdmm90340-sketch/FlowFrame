@@ -17,6 +17,8 @@ FlowFrame 的独立原生 iOS 客户端，使用 SwiftUI、URLSession 和 AVFoun
 
 小红书、微博、快手、图集合成 MP4、任意格式转码、安卓的 yt-dlp/FFmpeg 能力、播放列表与多段视频拼接尚未移植。接口会随平台变化；解析器存在和测试夹具通过不等于真实网络下载已通过。
 
+**抖音解析仍属实验功能：目前只有合成数据测试覆盖，本次公开样例未取得可下载媒体。** B 站已有 Windows 匿名接口及媒体头探测，iOS 在线端到端下载尚未验证。详细证据见 [验证记录](VERIFICATION.md)。
+
 ## 构建
 
 使用 Mac、Xcode 16.4 和 XcodeGen 2.44.1。Windows 可编辑源码，iOS 编译和模拟器测试由 GitHub Actions 的 macOS 环境执行。
@@ -44,9 +46,10 @@ xcodebuild build -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
 每次成功的 iOS CI 包含：
 
 1. Swift Package 单元测试：链接、URL 策略和平台解析数据。
-2. iPhone 模拟器 UI 测试：启动、无效链接错误、页面导航与截图。
-3. `iphoneos` Release 构建，检查 ARM64 架构和未签名状态。
-4. IPA ZIP 完整性和 SHA-256、源码提交及测试结果元数据。
+2. 模拟器媒体处理测试：使用合成 H.264/AAC 文件检查实际音视频合并、取消及伪媒体拒绝。
+3. iPhone 模拟器 UI 测试：启动、无效链接错误、页面导航与截图。
+4. `iphoneos` Release 构建，检查 ARM64 架构和未签名状态。
+5. IPA ZIP 完整性和 SHA-256、源码提交及测试结果元数据。
 
 上述测试不覆盖 iPhone 签名安装、真实站点解析下载成功率或长期后台运行。首版在线验收与真实设备验收状态见 [验证记录](VERIFICATION.md)，不得以“编译通过”代替。
 
@@ -54,6 +57,7 @@ xcodebuild build -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
 
 - `FlowFrameCore/`：无第三方依赖的 Swift Package，包含链接策略、媒体模型及平台解析器。
 - `FlowFrame/`：SwiftUI 界面、下载队列、任务记录、AVFoundation 合并和系统分享。
+- `FlowFrameTests/`：真实 AVFoundation 媒体处理测试与小型合成媒体。
 - `FlowFrameUITests/`：设备模拟器 UI 测试。
 - `project.yml` / `Info.plist`：可审阅的 XcodeGen 工程定义和应用属性。
 

@@ -1,6 +1,6 @@
 # 媒体下载
 
-**iOS 适配**：[iOS 原生客户端与构建说明](ios/README.md)。首版为独立的 0.1.0 实验版，发布未签名 IPA，安装前需要 Apple 签名；功能及验收范围见 iOS 文档。
+**iOS 适配**：[iOS 0.1.0 实验版发布页](https://github.com/mdmm90340-sketch/FlowFrame/releases/tag/ios-v0.1.0) · [原生客户端与构建说明](ios/README.md)。IPA 未签名，安装前需要 Apple 签名；抖音线上样例尚未通过解析验证，功能及验收范围见 iOS 文档。
 
 媒体下载（FlowFrame）是一款面向 Android 的开源公开视频保存工具。把抖音分享文案、抖音链接、`b23.tv` 短链或哔哩哔哩视频链接粘贴进应用，即可预览内容并选择保存方式。
 

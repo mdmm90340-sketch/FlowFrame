@@ -53,7 +53,14 @@ jobs:
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO | tee dist/ios/simulator-build.log | xcbeautify
       - name: Capture simulator home screen
+        timeout-minutes: 5
         run: |
+          STATE=$(xcrun simctl list devices available --json | python3 -c 'import json,os,sys; print(next(x["state"] for devices in json.load(sys.stdin)["devices"].values() for x in devices if x["udid"] == os.environ["SIMULATOR_ID"]))')
+          if [ "$STATE" != "Booted" ]; then
+            xcrun simctl boot "$SIMULATOR_ID"
+          fi
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+          xcrun simctl install "$SIMULATOR_ID" build/ios-simulator/Build/Products/Debug-iphonesimulator/FlowFrame.app
           xcrun simctl launch "$SIMULATOR_ID" com.flowframe.ios
           sleep 2
           xcrun simctl io "$SIMULATOR_ID" screenshot dist/ios/FlowFrame-iOS-home.png
