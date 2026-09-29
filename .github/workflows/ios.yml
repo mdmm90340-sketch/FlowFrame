@@ -40,6 +40,7 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec ios/project.yml
       - name: Select iPhone simulator
+        timeout-minutes: 5
         run: |
           SIMULATOR_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for runtime,devices in d.items() if "iOS-18-5" in runtime for x in devices if x["name"].startswith("iPhone")))')
           echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
@@ -49,6 +50,7 @@ jobs:
           xcodebuild test -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
             -configuration Debug -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath build/ios-simulator -resultBundlePath dist/ios/UITests.xcresult \
+            -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO | tee dist/ios/simulator-build.log | xcbeautify
       - name: Capture simulator home screen
         run: |

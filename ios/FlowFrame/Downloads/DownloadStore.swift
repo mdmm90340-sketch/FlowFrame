@@ -124,6 +124,7 @@ final class DownloadStore: ObservableObject {
         foreground = value
         if value {
             endBackgroundTime()
+            refreshMissingFiles()
             startNext()
         } else if activeID != nil, backgroundID == .invalid {
             backgroundID = UIApplication.shared.beginBackgroundTask(withName: "Finish current FlowFrame download") { [weak self] in
@@ -146,6 +147,18 @@ final class DownloadStore: ObservableObject {
             UIApplication.shared.endBackgroundTask(backgroundID)
             backgroundID = .invalid
         }
+    }
+
+    private func refreshMissingFiles() {
+        var changed = false
+        for index in records.indices where records[index].status == .completed {
+            guard fileURL(for: records[index]) == nil else { continue }
+            records[index].status = .failed
+            records[index].fileName = nil
+            records[index].detail = "已下载文件被移动或删除，可以重试下载。"
+            changed = true
+        }
+        if changed { persist() }
     }
 
     private func startNext() {

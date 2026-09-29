@@ -12,13 +12,15 @@ enum MediaExporter {
             let asset = AVURLAsset(url: file)
             let tracks = try await asset.loadTracks(withMediaType: kind == .video ? .video : .audio)
             let duration = try await asset.load(.duration)
-            guard !tracks.isEmpty, duration.isNumeric, duration.seconds > 0 else {
+            let playable = try await asset.load(.isPlayable)
+            guard !tracks.isEmpty, playable, duration.isNumeric, duration.seconds > 0 else {
                 throw DownloadFailure.message("下载内容缺少有效的媒体轨道，请重新解析。")
             }
         }
     }
 
     static func merge(video: URL, audio: URL, destination: URL) async throws -> URL {
+        try Task.checkCancellation()
         let videoAsset = AVURLAsset(url: video)
         let audioAsset = AVURLAsset(url: audio)
         guard let videoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,

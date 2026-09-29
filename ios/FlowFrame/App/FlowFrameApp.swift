@@ -11,7 +11,8 @@ struct FlowFrameApp: App {
                 .environmentObject(downloads)
                 .tint(Brand.purple)
                 .onChange(of: scenePhase) { phase in
-                    downloads.setForeground(phase == .active)
+                    if phase == .active { downloads.setForeground(true) }
+                    else if phase == .background { downloads.setForeground(false) }
                 }
         }
     }
