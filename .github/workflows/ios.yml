@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 35
     env:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      NSUnbufferedIO: YES
     steps:
       - uses: actions/checkout@v4
       - name: Select and record toolchain
@@ -51,26 +52,32 @@ jobs:
             -configuration Debug -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -derivedDataPath build/ios-simulator -resultBundlePath dist/ios/UITests.xcresult \
             -parallel-testing-enabled NO \
-            CODE_SIGNING_ALLOWED=NO | tee dist/ios/simulator-build.log | xcbeautify
-      - name: Capture simulator home screen
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee dist/ios/simulator-build.log | xcbeautify
+      - name: Export verified UI test screenshots
         timeout-minutes: 5
         run: |
-          STATE=$(xcrun simctl list devices available --json | python3 -c 'import json,os,sys; print(next(x["state"] for devices in json.load(sys.stdin)["devices"].values() for x in devices if x["udid"] == os.environ["SIMULATOR_ID"]))')
-          if [ "$STATE" != "Booted" ]; then
-            xcrun simctl boot "$SIMULATOR_ID"
-          fi
-          xcrun simctl bootstatus "$SIMULATOR_ID" -b
-          xcrun simctl install "$SIMULATOR_ID" build/ios-simulator/Build/Products/Debug-iphonesimulator/FlowFrame.app
-          xcrun simctl launch "$SIMULATOR_ID" com.flowframe.ios
-          sleep 2
-          xcrun simctl io "$SIMULATOR_ID" screenshot dist/ios/FlowFrame-iOS-home.png
+          xcrun xcresulttool export attachments --path dist/ios/UITests.xcresult --output-path build/ios-test-attachments
+          python3 - <<'PY'
+          import json, pathlib, re, shutil
+          root = pathlib.Path('build/ios-test-attachments')
+          manifest = json.loads((root / 'manifest.json').read_text())
+          attachments = [item for test in manifest for item in test.get('attachments', [])]
+          for screen in ['Home', 'Downloads', 'About']:
+              pattern = re.compile(r'FlowFrame[\s_-]+' + screen + r'(?:[\s_.-]|$)')
+              matches = [item for item in attachments if pattern.search(item.get('suggestedHumanReadableName', ''))]
+              assert len(matches) == 1, f'Expected one {screen} screenshot, found {len(matches)}: {attachments}'
+              source = root / matches[0]['exportedFileName']
+              assert source.resolve().parent == root.resolve()
+              assert source.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'), 'Expected a PNG screenshot'
+              shutil.copyfile(source, pathlib.Path('dist/ios') / f'FlowFrame-iOS-{screen.lower()}.png')
+          PY
       - name: Build unsigned ARM64 app
         run: |
           set -o pipefail
           xcodebuild build -project ios/FlowFrame.xcodeproj -scheme FlowFrame \
             -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath build/ios-device CODE_SIGNING_ALLOWED=NO \
-            | tee dist/ios/device-build.log | xcbeautify
+            2>&1 | tee dist/ios/device-build.log | xcbeautify
       - name: Package unsigned IPA and provenance
         run: |
           set -euo pipefail
@@ -94,7 +101,7 @@ jobs:
               'real_iphone_installation': 'not_tested', 'live_platform_download': 'not_verified'
           }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
-          (cd dist/ios && shasum -a 256 FlowFrame-iOS-0.1.0-unsigned.ipa FlowFrame-iOS-README.md build-provenance.json FlowFrame-iOS-home.png > SHA256SUMS.txt)
+          (cd dist/ios && shasum -a 256 FlowFrame-iOS-0.1.0-unsigned.ipa FlowFrame-iOS-README.md build-provenance.json FlowFrame-iOS-*.png > SHA256SUMS.txt)
       - name: Upload distributable files
         uses: actions/upload-artifact@v4
         with:
